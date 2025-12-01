@@ -1,0 +1,8 @@
+discord.py
+aiosqlite
+python-dotenv
+yfinance
+matplotlib
+pandas
+mplfinance
+aiohttp
