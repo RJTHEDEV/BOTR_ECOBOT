@@ -5,4 +5,5 @@ yfinance
 matplotlib
 pandas
 mplfinance
+aiofiles
 aiohttp

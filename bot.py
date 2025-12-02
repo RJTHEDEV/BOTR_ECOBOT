@@ -176,6 +176,27 @@ class BOTR(commands.Bot):
                     PRIMARY KEY (guild_id, platform, username)
                 )
             ''')
+            # Ticket Panels Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_panels (
+                    message_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER,
+                    guild_id INTEGER,
+                    title TEXT,
+                    description TEXT,
+                    button_label TEXT
+                )
+            ''')
+            # Tickets Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tickets (
+                    channel_id INTEGER PRIMARY KEY,
+                    guild_id INTEGER,
+                    user_id INTEGER,
+                    panel_message_id INTEGER,
+                    status TEXT DEFAULT 'open'
+                )
+            ''')
             # Portfolio Table
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS portfolio (
