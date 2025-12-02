@@ -165,12 +165,15 @@ class BOTR(commands.Bot):
                     PRIMARY KEY (guild_id, user_id)
                 )
             ''')
-            # Watchlist Table
+            # Streamers Table
             await cursor.execute('''
-                CREATE TABLE IF NOT EXISTS watchlist (
-                    user_id INTEGER,
-                    ticker TEXT,
-                    PRIMARY KEY (user_id, ticker)
+                CREATE TABLE IF NOT EXISTS streamers (
+                    guild_id INTEGER,
+                    channel_id INTEGER,
+                    platform TEXT,
+                    username TEXT,
+                    last_live REAL,
+                    PRIMARY KEY (guild_id, platform, username)
                 )
             ''')
             # Portfolio Table
