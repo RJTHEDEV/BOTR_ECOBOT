@@ -4,6 +4,8 @@ import os
 import asyncio
 import aiosqlite
 from dotenv import load_dotenv
+import sys
+import traceback
 
 load_dotenv()
 
@@ -207,11 +209,53 @@ class BOTR(commands.Bot):
                     PRIMARY KEY (user_id, ticker)
                 )
             ''')
+            # Voice Hubs Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS voice_hubs (
+                    guild_id INTEGER,
+                    channel_id INTEGER PRIMARY KEY,
+                    category_id INTEGER,
+                    name_template TEXT
+                )
+            ''')
+            # Temp Channels Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS temp_channels (
+                    channel_id INTEGER PRIMARY KEY,
+                    owner_id INTEGER
+                )
+            ''')
         await self.db.commit()
 
     async def close(self):
         await self.db.close()
         await super().close()
+
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.CommandNotFound):
+            return
+        print(f"Ignoring exception in command {ctx.command}:", file=sys.stderr)
+        traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+
+    async def on_error(self, event_method, *args, **kwargs):
+        print(f"Ignoring exception in {event_method}:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+        
+        # Add a sync command for admins
+        if message.content == "!sync" and message.author.guild_permissions.administrator:
+            try:
+                self.tree.copy_global_to(guild=message.guild)
+                synced = await self.tree.sync(guild=message.guild)
+                await message.channel.send(f"Synced {len(synced)} commands to this guild.")
+            except Exception as e:
+                await message.channel.send(f"Error syncing: {e}")
+            return
+
+        await self.process_commands(message)
 
 bot = BOTR()
 

@@ -40,7 +40,7 @@ class Streamers(commands.Cog):
         token = await self.get_twitch_token()
         client_id = os.getenv('TWITCH_CLIENT_ID')
         
-        if not token or not client_id: return False, None
+        if not token or not client_id: return False, None, None, None, None, None
 
         headers = {
             'Client-ID': client_id,
@@ -48,30 +48,38 @@ class Streamers(commands.Cog):
         }
         
         try:
+            # 1. Get Stream Info
             async with session.get(f'https://api.twitch.tv/helix/streams?user_login={username}', headers=headers) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data['data']:
                         stream = data['data'][0]
-                        return True, stream['title']
+                        title = stream['title']
+                        thumbnail = stream['thumbnail_url'].replace('{width}x{height}', '1280x720')
+                        game_name = stream['game_name']
+                        viewer_count = stream['viewer_count']
+                        user_id = stream['user_id']
+                        
+                        # 2. Get User Info (Avatar)
+                        avatar_url = None
+                        async with session.get(f'https://api.twitch.tv/helix/users?id={user_id}', headers=headers) as user_resp:
+                            if user_resp.status == 200:
+                                user_data = await user_resp.json()
+                                if user_data['data']:
+                                    avatar_url = user_data['data'][0]['profile_image_url']
+                        
+                        return True, title, thumbnail, game_name, viewer_count, avatar_url
         except Exception as e:
             print(f"Twitch check error for {username}: {e}")
         
-        return False, None
+        return False, None, None, None, None, None
 
     async def check_youtube(self, session, username):
         api_key = os.getenv('YOUTUBE_API_KEY')
-        if not api_key: return False, None
+        if not api_key: return False, None, None, None, None, None
 
-        # This is a simplified check. Ideally we'd store Channel ID, not username.
-        # Searching by username/custom URL is tricky. We'll assume 'username' is the channel handle or ID for now.
-        # If it's a handle (@user), we need to resolve it. 
-        # For simplicity in this v1, let's assume the user provides the Channel ID if the username search fails, 
-        # or we search for the channel.
-        
         try:
-            # Search for live video by channelId
-            # First, try to find channel ID from username (handle)
+            # 1. Resolve Channel ID
             channel_id = username
             if username.startswith('@'):
                  async with session.get(f'https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q={username}&key={api_key}') as resp:
@@ -80,47 +88,65 @@ class Streamers(commands.Cog):
                         if data['items']:
                             channel_id = data['items'][0]['id']['channelId']
 
+            # 2. Get Live Video
             async with session.get(f'https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={channel_id}&eventType=live&type=video&key={api_key}') as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data['items']:
                         video = data['items'][0]
-                        return True, video['snippet']['title']
+                        title = video['snippet']['title']
+                        thumbnail = video['snippet']['thumbnails']['high']['url']
+                        video_id = video['id']['videoId']
+                        
+                        # 3. Get Viewer Count (requires videos endpoint)
+                        viewer_count = 0
+                        async with session.get(f'https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id={video_id}&key={api_key}') as v_resp:
+                            if v_resp.status == 200:
+                                v_data = await v_resp.json()
+                                if v_data['items']:
+                                    viewer_count = v_data['items'][0]['liveStreamingDetails'].get('concurrentViewers', 0)
+
+                        # 4. Get Channel Avatar
+                        avatar_url = None
+                        async with session.get(f'https://www.googleapis.com/youtube/v3/channels?part=snippet&id={channel_id}&key={api_key}') as c_resp:
+                             if c_resp.status == 200:
+                                c_data = await c_resp.json()
+                                if c_data['items']:
+                                    avatar_url = c_data['items'][0]['snippet']['thumbnails']['default']['url']
+
+                        return True, title, thumbnail, "YouTube Live", viewer_count, avatar_url
         except Exception as e:
              print(f"YouTube check error for {username}: {e}")
 
-        return False, None
+        return False, None, None, None, None, None
 
     async def check_kick(self, session, username):
-        # Kick has an undocumented API: https://kick.com/api/v1/channels/{slug}
-        # Note: This is protected by Cloudflare and might fail. 
-        # A better approach for bots is often just checking the page status or using a headless browser (not available here).
-        # We will try the API endpoint first.
         try:
             async with session.get(f'https://kick.com/api/v1/channels/{username}') as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('livestream'):
-                        return True, data['livestream']['session_title']
+                        title = data['livestream']['session_title']
+                        thumbnail = data['livestream']['thumbnail']['url']
+                        game_name = data['livestream']['categories'][0]['name'] if data['livestream']['categories'] else "Kick Stream"
+                        viewer_count = data['livestream']['viewer_count']
+                        avatar_url = data['user']['profile_pic']
+                        
+                        return True, title, thumbnail, game_name, viewer_count, avatar_url
         except:
             pass
-        return False, None
+        return False, None, None, None, None, None
 
     async def check_tiktok(self, session, username):
-        # TikTok is very hard to scrape without a library. 
-        # We can try checking the embed page or a specific unofficial API.
-        # For now, we will leave this as a placeholder or try a very basic scrape.
-        # Basic scrape: fetch https://www.tiktok.com/@username/live
-        # Check for "status": 2 (LIVE) in the HTML data blob.
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
             async with session.get(f'https://www.tiktok.com/@{username}/live', headers=headers) as resp:
                 text = await resp.text()
                 if '"status":2' in text or '"roomStatus":2' in text:
-                    return True, "Live on TikTok"
+                    return True, "Live on TikTok", None, "TikTok Live", 0, None
         except:
             pass
-        return False, None
+        return False, None, None, None, None, None
 
     @tasks.loop(minutes=5)
     async def streamer_check_loop(self):
@@ -133,33 +159,52 @@ class Streamers(commands.Cog):
             for guild_id, channel_id, platform, username, last_live in rows:
                 is_live = False
                 stream_title = "Live Stream"
+                thumbnail_url = None
+                game_name = "Just Chatting"
+                viewer_count = 0
+                avatar_url = None
 
                 if platform == 'twitch':
-                    is_live, title = await self.check_twitch(session, username)
-                    if title: stream_title = title
+                    is_live, title, thumb, game, viewers, avatar = await self.check_twitch(session, username)
                 elif platform == 'youtube':
-                    is_live, title = await self.check_youtube(session, username)
-                    if title: stream_title = title
+                    is_live, title, thumb, game, viewers, avatar = await self.check_youtube(session, username)
                 elif platform == 'kick':
-                    is_live, title = await self.check_kick(session, username)
-                    if title: stream_title = title
+                    is_live, title, thumb, game, viewers, avatar = await self.check_kick(session, username)
                 elif platform == 'tiktok':
-                    is_live, title = await self.check_tiktok(session, username)
-                    if title: stream_title = title
+                    is_live, title, thumb, game, viewers, avatar = await self.check_tiktok(session, username)
 
-                # Logic to send alert only once per stream
-                # We use a simple timestamp check. If is_live and (now - last_live) > 1 hour (to avoid spam if bot restarts), send alert.
-                now = datetime.datetime.now().timestamp()
-                
                 if is_live:
+                    if title: stream_title = title
+                    if thumb: thumbnail_url = thumb
+                    if game: game_name = game
+                    if viewers: viewer_count = viewers
+                    if avatar: avatar_url = avatar
+
+                    # Logic to send alert only once per stream
+                    now = datetime.datetime.now().timestamp()
+                    
                     if (now - last_live) > 3600: # 1 hour cooldown
                         channel = self.bot.get_channel(channel_id)
                         if channel:
-                            embed = discord.Embed(title=f"🔴 {username} is LIVE on {platform.capitalize()}!", 
-                                                  description=f"**{stream_title}**\n\n[Watch Here](https://www.{platform}.com/{username})", 
-                                                  color=discord.Color.red())
-                            embed.set_thumbnail(url=f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp") # Generic icon
-                            await channel.send(embed=embed)
+                            stream_url = f"https://www.{platform}.com/{username}"
+                            if platform == "kick": stream_url = f"https://kick.com/{username}" # Fix kick url
+                            
+                            embed = discord.Embed(description=f"**{stream_title}**", color=discord.Color.purple())
+                            embed.set_author(name=f"{username} is LIVE on {platform.capitalize()}!", icon_url=avatar_url or f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
+                            
+                            embed.add_field(name="Game", value=game_name, inline=True)
+                            embed.add_field(name="Viewers", value=str(viewer_count), inline=True)
+                            
+                            if thumbnail_url:
+                                embed.set_image(url=thumbnail_url)
+                            
+                            embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
+
+                            # Button View
+                            view = discord.ui.View()
+                            view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=stream_url))
+                            
+                            await channel.send(content=f"@everyone {username} is live!", embed=embed, view=view)
                         
                         # Update last_live
                         await self.bot.db.execute("UPDATE streamers SET last_live = ? WHERE guild_id = ? AND platform = ? AND username = ?", 

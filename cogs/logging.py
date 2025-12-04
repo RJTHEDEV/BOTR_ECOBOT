@@ -71,9 +71,9 @@ class Logging(commands.Cog):
             return
 
         """
-        log_type: join_leave, messages, voice, other, market_alerts, or all
+        log_type: join_leave, messages, voice, other, market_alerts, ticket_logs, or all
         """
-        valid_types = ["join_leave", "messages", "voice", "other", "market_alerts", "all"]
+        valid_types = ["join_leave", "messages", "voice", "other", "market_alerts", "ticket_logs", "all"]
         if log_type not in valid_types:
             await ctx.send(f"Invalid type. Choose from: {', '.join(valid_types)}")
             return
@@ -176,6 +176,46 @@ class Logging(commands.Cog):
         embed.add_field(name="Content", value=message.content[:1024] or "[No Content]", inline=False)
         embed.set_footer(text=f"ID: {message.id}")
         await self.log_event(message.guild, "messages", embed)
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload):
+        # If message was cached, on_message_delete already handled it
+        if payload.cached_message: return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild: return
+        
+        channel = guild.get_channel(payload.channel_id)
+        if not channel: return
+
+        embed = discord.Embed(title="Message Deleted (Uncached)", description=f"In {channel.mention}", color=discord.Color.red())
+        embed.add_field(name="Content", value="[Content not available - Message was not in cache]", inline=False)
+        embed.set_footer(text=f"ID: {payload.message_id}")
+        await self.log_event(guild, "messages", embed)
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload):
+        # If message was cached, on_message_edit already handled it
+        if payload.cached_message: return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild: return
+        
+        channel = guild.get_channel(payload.channel_id)
+        if not channel: return
+
+        # Try to fetch the message to get the author and new content
+        try:
+            message = await channel.fetch_message(payload.message_id)
+            if message.author.bot: return
+            
+            embed = discord.Embed(title="Message Edited (Uncached)", description=f"In {channel.mention} by {message.author.mention}", color=discord.Color.orange())
+            embed.add_field(name="Before", value="[Content not available]", inline=False)
+            embed.add_field(name="After", value=message.content[:1024] or "[No Content]", inline=False)
+            embed.set_footer(text=f"ID: {payload.message_id}")
+            await self.log_event(guild, "messages", embed)
+        except:
+            pass
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
