@@ -6,6 +6,9 @@ import aiosqlite
 from dotenv import load_dotenv
 import sys
 import traceback
+import datetime
+from utils.embeds import Embeds
+import difflib
 
 load_dotenv()
 
@@ -19,41 +22,67 @@ intents.voice_states = True
 
 class BOTR(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix='!', intents=intents, help_command=commands.DefaultHelpCommand())
+        super().__init__(command_prefix='!', intents=intents, help_command=None) # Disable default help
         self.db = None
 
     async def setup_hook(self):
-        # Initialize database
-        self.db = await aiosqlite.connect('data/bot.db')
-        await self.create_tables()
+        with open("startup.log", "w") as f:
+            f.write("Starting setup_hook...\n")
         
-        # Load cogs
-        for filename in os.listdir('./cogs'):
-            if filename.endswith('.py'):
-                await self.load_extension(f'cogs.{filename[:-3]}')
-                print(f'Loaded {filename}')
-        
-        # Sync commands
-        # Global sync can take up to an hour. For instant updates in dev, sync to guild.
-        # await self.tree.sync() 
-        
-        # Sync to specific guild (Instant) - Replace with your Guild ID if needed, 
-        # or just use global sync and wait. For now, I'll use global sync but print a warning.
         try:
-            synced = await self.tree.sync()
-            print(f"Synced {len(synced)} commands globally.")
-        except Exception as e:
-            print(f"Error syncing commands: {e}")
+            # Initialize database
+            self.db = await aiosqlite.connect('data/bot.db')
+            await self.create_tables()
+            with open("startup.log", "a") as f: f.write("Tables created.\n")
+            
+            # Load cogs
+            for filename in os.listdir('./cogs'):
+                if filename.endswith('.py'):
+                    try:
+                        await self.load_extension(f'cogs.{filename[:-3]}')
+                        print(f'Loaded {filename}')
+                        with open("startup.log", "a") as f: f.write(f"Loaded {filename}\n")
+                    except Exception as e:
+                        print(f"Failed to load {filename}: {e}")
+                        with open("startup.log", "a") as f: f.write(f"Failed to load {filename}: {e}\n")
+            
+            # Sync commands
+            try:
+                synced = await self.tree.sync()
+                print(f"Synced {len(synced)} commands globally.")
+                with open("startup.log", "a") as f: f.write(f"Synced {len(synced)} commands globally.\n")
+            except Exception as e:
+                print(f"Error syncing commands: {e}")
+                with open("startup.log", "a") as f: f.write(f"Error syncing commands: {e}\n")
 
-        print(f'Logged in as {self.user} (ID: {self.user.id})')
+            print(f'Logged in as {self.user} (ID: {self.user.id})')
+            with open("startup.log", "a") as f: f.write(f"Logged in as {self.user}\n")
+            
+        except Exception as e:
+            print(f"Setup Hook Error: {e}")
+            with open("startup.log", "a") as f: f.write(f"Setup Hook Error: {e}\n")
 
     async def create_tables(self):
         async with self.db.cursor() as cursor:
             # Users Table
-            try:
-                await cursor.execute("ALTER TABLE users ADD COLUMN tickets INTEGER DEFAULT 0")
-            except:
-                pass # Column likely exists
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN tickets INTEGER DEFAULT 0")
+            except: pass 
+            
+            # Phase 1 Columns
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN bank INTEGER DEFAULT 0")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN reputation INTEGER DEFAULT 0")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN last_daily TEXT")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN last_work TEXT")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN last_crime TEXT")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN last_rob TEXT")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN last_rep TEXT")
+            except: pass
 
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
@@ -61,7 +90,15 @@ class BOTR(commands.Bot):
                     balance INTEGER DEFAULT 0,
                     xp INTEGER DEFAULT 0,
                     level INTEGER DEFAULT 1,
-                    tickets INTEGER DEFAULT 0
+                    tickets INTEGER DEFAULT 0,
+                    bank INTEGER DEFAULT 0,
+                    reputation INTEGER DEFAULT 0,
+                    last_daily TEXT,
+                    last_work TEXT,
+                    last_crime TEXT,
+                    last_rob TEXT,
+                    last_rep TEXT,
+                    daily_streak INTEGER DEFAULT 0
                 )
             ''')
             # Inventory Table
@@ -74,10 +111,14 @@ class BOTR(commands.Bot):
                 )
             ''')
             # Store Table
-            try:
-                await cursor.execute("ALTER TABLE store ADD COLUMN currency TEXT DEFAULT 'coins'")
-            except:
-                pass
+            try: await cursor.execute("ALTER TABLE store ADD COLUMN currency TEXT DEFAULT 'coins'")
+            except: pass
+
+            # Phase 2 Columns
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0")
+            except: pass
+            try: await cursor.execute("ALTER TABLE store ADD COLUMN category TEXT DEFAULT 'Items'")
+            except: pass
 
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS store (
@@ -85,7 +126,8 @@ class BOTR(commands.Bot):
                     name TEXT UNIQUE,
                     price INTEGER,
                     description TEXT,
-                    currency TEXT DEFAULT 'coins'
+                    currency TEXT DEFAULT 'coins',
+                    category TEXT DEFAULT 'Items'
                 )
             ''')
             # Schedule Table
@@ -200,13 +242,30 @@ class BOTR(commands.Bot):
                 )
             ''')
             # Portfolio Table
+            try: await cursor.execute("ALTER TABLE portfolio ADD COLUMN avg_buy_price REAL DEFAULT 0.0")
+            except: pass
+
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS portfolio (
                     user_id INTEGER,
                     ticker TEXT,
                     avg_price REAL,
                     shares INTEGER,
+                    avg_buy_price REAL DEFAULT 0.0,
                     PRIMARY KEY (user_id, ticker)
+                )
+            ''')
+
+            # Limit Orders Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS limit_orders (
+                    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    symbol TEXT,
+                    order_type TEXT, -- 'buy_limit' or 'sell_limit'
+                    target_price REAL,
+                    quantity INTEGER,
+                    created_at TEXT
                 )
             ''')
             # Voice Hubs Table
@@ -225,6 +284,75 @@ class BOTR(commands.Bot):
                     owner_id INTEGER
                 )
             ''')
+            # Welcome Settings Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS welcome_settings (
+                    guild_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER
+                )
+            ''')
+            # Price Alerts Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS price_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    ticker TEXT,
+                    target_price REAL,
+                    condition TEXT,
+                    triggered BOOLEAN DEFAULT 0
+                )
+            ''')
+            # Polls Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS polls (
+                    message_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER,
+                    guild_id INTEGER,
+                    author_id INTEGER,
+                    question TEXT,
+                    options TEXT,
+                    end_time TEXT,
+                    active BOOLEAN DEFAULT 1
+                )
+            ''')
+            # Poll Votes Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS poll_votes (
+                    poll_id INTEGER,
+                    user_id INTEGER,
+                    option_index INTEGER,
+                    PRIMARY KEY (poll_id, user_id)
+                )
+            ''')
+            # Options Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS options (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    ticker TEXT,
+                    option_type TEXT, -- 'call' or 'put'
+                    strike_price REAL,
+                    expiration_date TEXT,
+                    premium REAL,
+                    contracts INTEGER,
+                    status TEXT DEFAULT 'active'
+                )
+            ''')
+            # Birthdays Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS birthdays (
+                    user_id INTEGER PRIMARY KEY,
+                    month INTEGER,
+                    day INTEGER
+                )
+            ''')
+            # Starboard Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS starboard (
+                    message_id INTEGER PRIMARY KEY,
+                    starboard_message_id INTEGER
+                )
+            ''')
         await self.db.commit()
 
     async def close(self):
@@ -233,7 +361,27 @@ class BOTR(commands.Bot):
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
+            # Suggest closest match
+            cmd = ctx.invoked_with
+            all_cmds = [c.name for c in self.commands]
+            matches = difflib.get_close_matches(cmd, all_cmds, n=1, cutoff=0.6)
+            
+            msg = f"Command `!{cmd}` not found."
+            if matches:
+                msg += f"\nDid you mean `!{matches[0]}`?"
+            
+            await ctx.send(embed=Embeds.error("Unknown Command", msg))
             return
+
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.send(embed=Embeds.warning("Cooldown", f"Try again <t:{int(datetime.datetime.now().timestamp() + error.retry_after)}:R>."))
+            return
+
+        if isinstance(error, commands.MissingPermissions):
+            perms = ", ".join(error.missing_permissions)
+            await ctx.send(embed=Embeds.error("Permission Denied", f"You need **{perms}** permissions."))
+            return
+
         print(f"Ignoring exception in command {ctx.command}:", file=sys.stderr)
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 

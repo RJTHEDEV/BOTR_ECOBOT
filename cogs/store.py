@@ -6,24 +6,18 @@ class Store(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_command(description="View items in the shop.")
-    async def shop(self, ctx, currency_type: str = "coins"):
-        currency_type = currency_type.lower()
-        if currency_type not in ["coins", "tickets"]:
-            await ctx.send("Invalid currency type. Use 'coins' or 'tickets'.")
-            return
-
-        async with self.bot.db.execute("SELECT name, price, description FROM store WHERE currency = ?", (currency_type,)) as cursor:
-            items = await cursor.fetchall()
+    async def shop(self, ctx):
+        # Get distinct categories
+        async with self.bot.db.execute("SELECT DISTINCT category FROM store") as cursor:
+            rows = await cursor.fetchall()
+            categories = [r[0] for r in rows] if rows else ["Items"]
         
-        if not items:
-            await ctx.send(f"The {currency_type} shop is currently empty.")
-            return
-
-        embed = discord.Embed(title=f"Community Shop ({currency_type.capitalize()})", color=discord.Color.gold())
-        for name, price, description in items:
-            cost_str = f"${price}" if currency_type == "coins" else f"🎟️ {price}"
-            embed.add_field(name=f"{name} - {cost_str}", value=description, inline=False)
-        await ctx.send(embed=embed)
+        # Default to showing all or first category? Let's show "All" or just prompt to select.
+        # Actually, let's show the first category by default or a welcome screen.
+        
+        view = ShopView(self.bot, categories, ctx.author)
+        embed = discord.Embed(title="🛒 Community Shop", description="Select a category below to browse items.", color=discord.Color.gold())
+        await ctx.send(embed=embed, view=view)
 
     @commands.hybrid_command(description="Buy an item from the shop.")
     async def buy(self, ctx, *, item_name: str):
@@ -84,16 +78,51 @@ class Store(commands.Cog):
 
     @commands.hybrid_command(description="Admin: Add an item to the shop.")
     @commands.has_permissions(administrator=True)
-    async def additem(self, ctx, name: str, price: int, description: str, currency: str = "coins"):
+    async def additem(self, ctx, name: str, price: int, description: str, currency: str = "coins", category: str = "Items"):
         if currency not in ["coins", "tickets"]:
             await ctx.send("Invalid currency. Use 'coins' or 'tickets'.")
             return
         try:
-            await self.bot.db.execute("INSERT INTO store (name, price, description, currency) VALUES (?, ?, ?, ?)", (name, price, description, currency))
+            await self.bot.db.execute("INSERT INTO store (name, price, description, currency, category) VALUES (?, ?, ?, ?, ?)", (name, price, description, currency, category))
             await self.bot.db.commit()
-            await ctx.send(f"Added {name} to the {currency} store.")
+            await ctx.send(f"Added {name} to the {currency} store (Category: {category}).")
         except Exception as e:
             await ctx.send(f"Error adding item: {e}")
+
+class ShopSelect(discord.ui.Select):
+    def __init__(self, bot, categories):
+        self.bot = bot
+        options = []
+        for cat in categories:
+            options.append(discord.SelectOption(label=cat, value=cat))
+        
+        super().__init__(placeholder="Select a category...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        category = self.values[0]
+        
+        async with self.bot.db.execute("SELECT name, price, description, currency FROM store WHERE category = ?", (category,)) as cursor:
+            items = await cursor.fetchall()
+        
+        if not items:
+            await interaction.response.edit_message(content="Category is empty.", embed=None)
+            return
+
+        embed = discord.Embed(title=f"🛒 Shop: {category}", color=discord.Color.gold())
+        for name, price, description, currency in items:
+            cost_str = f"${price}" if currency == "coins" else f"🎟️ {price}"
+            embed.add_field(name=f"{name} - {cost_str}", value=description, inline=False)
+        
+        await interaction.response.edit_message(embed=embed)
+
+class ShopView(discord.ui.View):
+    def __init__(self, bot, categories, user):
+        super().__init__(timeout=180)
+        self.user = user
+        self.add_item(ShopSelect(bot, categories))
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
 
 async def setup(bot):
     await bot.add_cog(Store(bot))

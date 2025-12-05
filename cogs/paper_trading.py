@@ -100,8 +100,8 @@ class PaperTrading(commands.Cog):
         color = "🟢" if pl >= 0 else "🔴"
         await ctx.send(f"Sold {shares} shares of {ticker} at ${price:.2f} (Total: ${total_value:.2f}).\nP/L: {color} ${pl:.2f} ({pl_pct:.2f}%)")
 
-    @commands.hybrid_command(description="View your paper trading portfolio.")
-    async def portfolio(self, ctx):
+    @commands.hybrid_command(name="tportfolio", aliases=["tp"], description="View your paper trading portfolio.")
+    async def tportfolio(self, ctx):
         async with self.bot.db.execute("SELECT ticker, avg_price, shares FROM portfolio WHERE user_id = ?", (ctx.author.id,)) as cursor:
             rows = await cursor.fetchall()
             

@@ -100,10 +100,20 @@ class Tickets(commands.Cog):
             await f.write(transcript_text)
 
         # Log to log channel (if configured)
-        async with self.bot.db.execute("SELECT channel_id FROM log_settings WHERE guild_id = ? AND log_type = 'other'", (ctx.guild.id,)) as cursor:
-            log_row = await cursor.fetchone()
-            if log_row:
-                log_channel = ctx.guild.get_channel(log_row[0])
+        # Try 'ticket_logs' first, then 'other', then 'all' (handled by get_log_channel in logging but we need to check manually here or use logging cog helper)
+        
+        logging_cog = self.bot.get_cog("Logging")
+        if logging_cog:
+            # We can use the helper directly if we want to send the file
+            # But log_event takes an embed. We want to send a file.
+            # So we get the channel ID manually using the helper logic
+            
+            channel_id = await logging_cog.get_log_channel(ctx.guild.id, "ticket_logs")
+            if not channel_id:
+                channel_id = await logging_cog.get_log_channel(ctx.guild.id, "other")
+            
+            if channel_id:
+                log_channel = ctx.guild.get_channel(channel_id)
                 if log_channel:
                     await log_channel.send(f"📕 **Ticket Closed**: {ctx.channel.name}", file=discord.File(filename))
 

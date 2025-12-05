@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import random
 import time
+import datetime
 
 LEVEL_ROLES = {
     1: "Level 1",
@@ -39,8 +40,6 @@ class Economy(commands.Cog):
         
         # Level Up Check
         new_xp = current_xp + amount
-        # Simple formula: Level = 0.1 * sqrt(XP)  => XP = (Level / 0.1)^2 = (Level * 10)^2 = 100 * Level^2
-        # Let's use a linear/exponential curve: XP needed = 100 * Level
         xp_needed = 100 * current_level
         
         if new_xp >= xp_needed:
@@ -67,6 +66,8 @@ class Economy(commands.Cog):
 
     @commands.hybrid_command(description="Check your coin and ticket balance.")
     async def balance(self, ctx):
+        print(f"Balance command invoked by {ctx.author} ({ctx.author.id})")
+        await ctx.defer()
         async with self.bot.db.execute("SELECT balance, xp, level, tickets FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
             row = await cursor.fetchone()
             if not row:
@@ -92,15 +93,62 @@ class Economy(commands.Cog):
     @commands.hybrid_command(description="Claim your daily reward.")
     @commands.cooldown(1, 86400, commands.BucketType.user)
     async def daily(self, ctx):
-        amount = 100
-        async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+        today = datetime.date.today().isoformat()
+        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        
+        async with self.bot.db.execute("SELECT balance, level, last_daily, daily_streak FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
             row = await cursor.fetchone()
             if not row:
-                await self.bot.db.execute("INSERT INTO users (user_id, balance) VALUES (?, ?)", (ctx.author.id, amount))
+                # New user
+                level, last_daily, streak = 1, None, 1
+                base_amount = 500
+                bonus = 50 # Level 1
+                streak_bonus = 0
+                total_amount = base_amount + bonus
+                await self.bot.db.execute("INSERT INTO users (user_id, balance, level, last_daily, daily_streak) VALUES (?, ?, ?, ?, ?)", 
+                                          (ctx.author.id, total_amount, level, today, 1))
             else:
-                await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, ctx.author.id))
+                balance, level, last_daily, streak = row
+                
+                # Check streak
+                if last_daily == yesterday:
+                    streak += 1
+                elif last_daily == today:
+                    await ctx.send("You already claimed your daily reward today!")
+                    return
+                else:
+                    streak = 1
+                
+                # Cap streak at 7 for visual purposes, but maybe keep counting for fun? 
+                # Let's cap bonus at 7 days
+                effective_streak = min(streak, 7)
+                
+                # Check for Mining Rig (Passive Income)
+                rig_bonus = 0
+                async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Mining Rig'", (ctx.author.id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row and row[0] > 0:
+                        rig_bonus = 200 * row[0] # $200 per rig
+
+                base_amount = 500
+                level_bonus = level * 50
+                streak_bonus = effective_streak * 50
+                total_amount = base_amount + level_bonus + streak_bonus + rig_bonus
+                
+                await self.bot.db.execute("UPDATE users SET balance = balance + ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
+                                          (total_amount, today, streak, ctx.author.id))
+        
         await self.bot.db.commit()
-        await ctx.send(f"You claimed your daily reward of ${amount}!")
+        
+        embed = discord.Embed(title="💰 Daily Reward", color=discord.Color.gold())
+        embed.add_field(name="Base", value="$500", inline=True)
+        embed.add_field(name="Level Bonus", value=f"${level_bonus}", inline=True)
+        embed.add_field(name="Streak Bonus", value=f"${streak_bonus} (Day {streak} 🔥)", inline=True)
+        if rig_bonus > 0:
+            embed.add_field(name="Mining Rig", value=f"${rig_bonus} 🖥️", inline=True)
+        embed.add_field(name="Total", value=f"**${total_amount}**", inline=False)
+        
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(description="Admin: Give coins to a user.")
     @commands.has_permissions(administrator=True)
@@ -125,6 +173,166 @@ class Economy(commands.Cog):
                 await self.bot.db.execute("UPDATE users SET tickets = tickets + ? WHERE user_id = ?", (amount, member.id))
         await self.bot.db.commit()
         await ctx.send(f"Gave 🎟️ {amount} tickets to {member.mention}.")
+
+    # --- Banking ---
+    @commands.hybrid_command(description="Deposit coins into your bank.")
+    async def deposit(self, ctx, amount: str):
+        await ctx.defer()
+        async with self.bot.db.execute("SELECT balance, bank FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                await ctx.send("You have no account.")
+                return
+            balance, bank = row
+        
+        if amount.lower() == "all":
+            deposit_amount = balance
+        else:
+            try:
+                deposit_amount = int(amount)
+            except ValueError:
+                await ctx.send("Invalid amount.")
+                return
+
+        if deposit_amount <= 0:
+            await ctx.send("Amount must be positive.")
+            return
+        
+        if deposit_amount > balance:
+            await ctx.send("Insufficient funds.")
+            return
+
+        await self.bot.db.execute("UPDATE users SET balance = balance - ?, bank = bank + ? WHERE user_id = ?", (deposit_amount, deposit_amount, ctx.author.id))
+        await self.bot.db.commit()
+        await ctx.send(f"🏦 Deposited **${deposit_amount}** into your bank.")
+
+    @commands.hybrid_command(description="Withdraw coins from your bank.")
+    async def withdraw(self, ctx, amount: str):
+        await ctx.defer()
+        async with self.bot.db.execute("SELECT balance, bank FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                await ctx.send("You have no account.")
+                return
+            balance, bank = row
+        
+        if amount.lower() == "all":
+            withdraw_amount = bank
+        else:
+            try:
+                withdraw_amount = int(amount)
+            except ValueError:
+                await ctx.send("Invalid amount.")
+                return
+
+        if withdraw_amount <= 0:
+            await ctx.send("Amount must be positive.")
+            return
+        
+        if withdraw_amount > bank:
+            await ctx.send("Insufficient funds in bank.")
+            return
+
+        await self.bot.db.execute("UPDATE users SET balance = balance + ?, bank = bank - ? WHERE user_id = ?", (withdraw_amount, withdraw_amount, ctx.author.id))
+        await self.bot.db.commit()
+        await ctx.send(f"💸 Withdrew **${withdraw_amount}** from your bank.")
+
+    # --- Income & Crime ---
+    @commands.hybrid_command(description="Work to earn some coins (1h cooldown).")
+    @commands.cooldown(1, 3600, commands.BucketType.user)
+    async def work(self, ctx):
+        earnings = random.randint(50, 200)
+        await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
+        await self.bot.db.commit()
+        await ctx.send(f"🔨 You worked hard and earned **${earnings}**!")
+
+    @commands.hybrid_command(description="Commit a crime (High risk/reward) (2h cooldown).")
+    @commands.cooldown(1, 7200, commands.BucketType.user)
+    async def crime(self, ctx):
+        if random.random() < 0.6: # 60% success
+            earnings = random.randint(300, 800)
+            await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
+            await self.bot.db.commit()
+            await ctx.send(f"🕵️ You successfully committed a crime and stole **${earnings}**!")
+        else:
+            fine = random.randint(100, 300)
+            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+            await self.bot.db.commit()
+            await ctx.send(f"🚓 You got caught! You paid a fine of **${fine}**.")
+
+    @commands.hybrid_command(description="Rob another user (Chance to fail).")
+    @commands.cooldown(1, 3600, commands.BucketType.user)
+    async def rob(self, ctx, target: discord.Member):
+        if target.bot or target == ctx.author:
+            await ctx.send("You can't rob them.")
+            return
+
+        async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (target.id,)) as cursor:
+            row = await cursor.fetchone()
+            target_bal = row[0] if row else 0
+
+        if target_bal < 100:
+            await ctx.send("They don't have enough coins to rob.")
+            return
+
+        # Check for Safe
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Safe'", (target.id,)) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0] > 0:
+                # Safe protects 50% of balance or increases fail chance?
+                # Let's make it increase fail chance drastically (80% fail)
+                if random.random() < 0.8:
+                    fine = random.randint(200, 1000)
+                    await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+                    await self.bot.db.commit()
+                    await ctx.send(f"🔒 **Safe Protected!** You triggered the alarm and paid a **${fine}** fine.")
+                    return
+
+        if random.random() < 0.4: # 40% success
+            steal_amount = random.randint(int(target_bal * 0.1), int(target_bal * 0.5))
+            await self.bot.db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (steal_amount, target.id))
+            await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (steal_amount, ctx.author.id))
+            await self.bot.db.commit()
+            await ctx.send(f"😈 You robbed {target.mention} and stole **${steal_amount}**!")
+        else:
+            fine = random.randint(100, 500)
+            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+            await self.bot.db.commit()
+            await ctx.send(f"🛡️ You failed to rob {target.mention} and paid a fine of **${fine}**.")
+
+    # --- Social ---
+    @commands.hybrid_command(description="Give a reputation point to a user (24h cooldown).")
+    @commands.cooldown(1, 86400, commands.BucketType.user)
+    async def rep(self, ctx, target: discord.Member):
+        if target == ctx.author:
+            await ctx.send("You can't rep yourself.")
+            return
+        
+        await self.bot.db.execute("UPDATE users SET reputation = reputation + 1 WHERE user_id = ?", (target.id,))
+        await self.bot.db.commit()
+        await ctx.send(f"🌟 You gave +1 reputation to {target.mention}!")
+
+    @commands.hybrid_command(description="View user profile.")
+    async def profile(self, ctx, user: discord.Member = None):
+        user = user or ctx.author
+        await ctx.defer()
+        
+        async with self.bot.db.execute("SELECT balance, bank, xp, level, reputation FROM users WHERE user_id = ?", (user.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                await ctx.send("User has no profile.")
+                return
+            bal, bank, xp, level, rep = row
+        
+        embed = discord.Embed(title=f"{user.display_name}'s Profile", color=discord.Color.purple())
+        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.add_field(name="💰 Wallet", value=f"${bal}", inline=True)
+        embed.add_field(name="🏦 Bank", value=f"${bank}", inline=True)
+        embed.add_field(name="📈 Net Worth", value=f"${bal + bank}", inline=True)
+        embed.add_field(name="⭐ Reputation", value=f"{rep}", inline=True)
+        embed.add_field(name="📊 Level", value=f"{level} (XP: {xp})", inline=True)
+        
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(description="View the XP Leaderboard.")
     async def leaderboard(self, ctx):
@@ -197,6 +405,140 @@ class Economy(commands.Cog):
                          if cursor.rowcount == 0:
                              await self.bot.db.execute("INSERT INTO users (user_id, balance) VALUES (?, ?)", (member.id, coin_reward))
                     await self.bot.db.commit()
+
+    # --- Crafting ---
+    RECIPES = {
+        "Mining Rig": {"GPU": 1, "Motherboard": 1, "Power Supply": 1},
+        "Safe": {"Steel": 5, "Lock": 1}
+    }
+
+    @commands.hybrid_command(description="Craft an item.")
+    async def craft(self, ctx, item_name: str):
+        item_name = item_name.title()
+        if item_name not in self.RECIPES:
+            await ctx.send(f"Unknown recipe. Available: {', '.join(self.RECIPES.keys())}")
+            return
+        
+        recipe = self.RECIPES[item_name]
+        
+        # Check materials
+        for mat, qty in recipe.items():
+            async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = ?", (ctx.author.id, mat)) as cursor:
+                row = await cursor.fetchone()
+                if not row or row[0] < qty:
+                    await ctx.send(f"❌ Missing materials: You need **{qty}x {mat}**.")
+                    return
+        
+        # Consume materials
+        for mat, qty in recipe.items():
+            await self.bot.db.execute("UPDATE inventory SET quantity = quantity - ? WHERE user_id = ? AND item_name = ?", (qty, ctx.author.id, mat))
+            
+        # Add crafted item
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = ?", (ctx.author.id, item_name)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                await self.bot.db.execute("UPDATE inventory SET quantity = quantity + 1 WHERE user_id = ? AND item_name = ?", (ctx.author.id, item_name))
+            else:
+                await self.bot.db.execute("INSERT INTO inventory (user_id, item_name, quantity) VALUES (?, ?, 1)", (ctx.author.id, item_name))
+        
+        await self.bot.db.commit()
+        await ctx.send(f"🛠️ Successfully crafted **{item_name}**!")
+
+    @commands.hybrid_command(description="View crafting recipes.")
+    async def recipes(self, ctx):
+        embed = discord.Embed(title="📜 Crafting Recipes", color=discord.Color.orange())
+        for item, mats in self.RECIPES.items():
+            mat_str = ", ".join([f"{qty}x {mat}" for mat, qty in mats.items()])
+            embed.add_field(name=item, value=mat_str, inline=False)
+        await ctx.send(embed=embed)
+
+    # --- Trading ---
+    @commands.hybrid_command(description="Trade an item with another user.")
+    async def trade(self, ctx, target: discord.Member, item_name: str, quantity: int, price: int):
+        if target.bot or target == ctx.author:
+            await ctx.send("Invalid trade target.")
+            return
+        
+        if quantity <= 0 or price < 0:
+            await ctx.send("Invalid quantity or price.")
+            return
+
+        # Check if user has item
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = ?", (ctx.author.id, item_name)) as cursor:
+            row = await cursor.fetchone()
+            if not row or row[0] < quantity:
+                await ctx.send(f"You don't have enough **{item_name}**.")
+                return
+
+        # Check if target has enough coins
+        async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (target.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row or row[0] < price:
+                await ctx.send(f"{target.display_name} doesn't have enough coins.")
+                return
+
+        # Create View
+        view = TradeView(ctx.author, target, item_name, quantity, price, self.bot)
+        embed = discord.Embed(title="🤝 Trade Offer", description=f"{ctx.author.mention} wants to trade:\n\n📦 **{quantity}x {item_name}**\n💰 For: **${price}**\n\n{target.mention}, do you accept?", color=discord.Color.blue())
+        await ctx.send(content=target.mention, embed=embed, view=view)
+
+class TradeView(discord.ui.View):
+    def __init__(self, seller, buyer, item, quantity, price, bot):
+        super().__init__(timeout=60)
+        self.seller = seller
+        self.buyer = buyer
+        self.item = item
+        self.quantity = quantity
+        self.price = price
+        self.bot = bot
+
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.green, emoji="✅")
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.buyer:
+            await interaction.response.send_message("This trade is not for you.", ephemeral=True)
+            return
+        
+        # Re-verify funds and items (in case they changed during the wait)
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = ?", (self.seller.id, self.item)) as cursor:
+            row = await cursor.fetchone()
+            if not row or row[0] < self.quantity:
+                await interaction.response.edit_message(content="❌ Trade failed: Seller no longer has the items.", view=None, embed=None)
+                return
+
+        async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (self.buyer.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row or row[0] < self.price:
+                await interaction.response.edit_message(content="❌ Trade failed: Buyer no longer has enough coins.", view=None, embed=None)
+                return
+
+        # Execute Trade
+        # 1. Remove item from seller
+        await self.bot.db.execute("UPDATE inventory SET quantity = quantity - ? WHERE user_id = ? AND item_name = ?", (self.quantity, self.seller.id, self.item))
+        # Remove row if 0? Maybe keep for history, but typically remove to save space. Let's keep for now.
+        
+        # 2. Add item to buyer
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = ?", (self.buyer.id, self.item)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                await self.bot.db.execute("UPDATE inventory SET quantity = quantity + ? WHERE user_id = ? AND item_name = ?", (self.quantity, self.buyer.id, self.item))
+            else:
+                await self.bot.db.execute("INSERT INTO inventory (user_id, item_name, quantity) VALUES (?, ?, ?)", (self.buyer.id, self.item, self.quantity))
+
+        # 3. Transfer Coins
+        await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (self.price, self.seller.id))
+        await self.bot.db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (self.price, self.buyer.id))
+        
+        await self.bot.db.commit()
+        
+        await interaction.response.edit_message(content=f"✅ **Trade Successful!**\n{self.seller.mention} gave **{self.quantity}x {self.item}**\n{self.buyer.mention} paid **${self.price}**", view=None, embed=None)
+
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.red, emoji="❌")
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.buyer and interaction.user != self.seller:
+            await interaction.response.send_message("You cannot decline this trade.", ephemeral=True)
+            return
+        
+        await interaction.response.edit_message(content="❌ Trade declined.", view=None, embed=None)
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))

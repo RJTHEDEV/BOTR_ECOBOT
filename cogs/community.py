@@ -249,5 +249,170 @@ class Community(commands.Cog):
     async def end_cmd(self, ctx, message_id: int):
         await self.end_raffle(message_id)
 
+    # --- Welcome ---
+    @commands.hybrid_group(invoke_without_command=True, description="Manage welcome messages.")
+    async def welcome(self, ctx):
+        await ctx.send("Use `/welcome set <channel>` or `/welcome test`.")
+
+    @welcome.command(description="Set the welcome channel.")
+    @commands.has_permissions(administrator=True)
+    async def set(self, ctx, channel: discord.TextChannel):
+        await self.bot.db.execute("INSERT OR REPLACE INTO welcome_settings (guild_id, channel_id) VALUES (?, ?)", (ctx.guild.id, channel.id))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Welcome messages will be sent to {channel.mention}.")
+
+    @welcome.command(description="Test the welcome message.")
+    @commands.has_permissions(administrator=True)
+    async def test(self, ctx):
+        await self.send_welcome_message(ctx.guild, ctx.author, ctx.channel)
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        # Check if welcome channel is set
+        async with self.bot.db.execute("SELECT channel_id FROM welcome_settings WHERE guild_id = ?", (member.guild.id,)) as cursor:
+            row = await cursor.fetchone()
+        
+        if row:
+            channel = member.guild.get_channel(row[0])
+            if channel:
+                await self.send_welcome_message(member.guild, member, channel)
+
+    async def send_welcome_message(self, guild, member, channel):
+        # Helper to find channel by name
+        def get_chan(names):
+            for ch in guild.text_channels + guild.voice_channels:
+                if any(n.lower() in ch.name.lower() for n in names):
+                    return ch
+            return None
+
+        # Find key channels
+        rules_ch = get_chan(["official-rules", "rules"])
+        intro_ch = get_chan(["introduce-yourself", "introductions"])
+        announce_ch = get_chan(["announcements"])
+        general_ch = get_chan(["general-chat", "general"])
+        hangout_ch = get_chan(["hangout", "lounge"])
+
+        # Build Description
+        desc = f"Welcome to the **{guild.name}** community! 🚀 We're excited to have you here!\n\n"
+        
+        desc += "🔹 **What We Offer:**\n"
+        desc += "🔥 A chill gaming community\n"
+        desc += "💬 Fun chats & voice channels\n"
+        desc += "🎉 Events, giveaways & more!\n\n"
+
+        desc += "✅ **Get Started:**\n"
+        if intro_ch: desc += f"1️⃣ Introduce Yourself in {intro_ch.mention}\n"
+        if rules_ch: desc += f"2️⃣ Read the Rules in {rules_ch.mention}\n"
+        if announce_ch: desc += f"3️⃣ Check Announcements in {announce_ch.mention}\n"
+        
+        join_fun = []
+        if general_ch: join_fun.append(general_ch.mention)
+        if hangout_ch: join_fun.append(hangout_ch.mention)
+        
+        if join_fun:
+            desc += f"4️⃣ Join the Fun! Play, chat, and enjoy in {' or '.join(join_fun)}!\n"
+
+        desc += f"\nIf you have any questions, feel free to ask our mods. Let's game on! 🎮✨"
+
+        embed = discord.Embed(description=desc, color=discord.Color.teal())
+        embed.set_author(name=f"Welcome {member.display_name} to {guild.name}!", icon_url=member.display_avatar.url)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"We are now {guild.member_count} members!")
+
+        await channel.send(content=f"👋 Welcome {member.mention} to **{guild.name}**! 🎮", embed=embed)
+
+    # --- Starboard ---
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload):
+        if str(payload.emoji) != "⭐": return
+        
+        channel = self.bot.get_channel(payload.channel_id)
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except:
+            return
+
+        reaction = discord.utils.get(message.reactions, emoji="⭐")
+        if not reaction or reaction.count < 3: return # Threshold: 3
+
+        # Check if already posted
+        async with self.bot.db.execute("SELECT starboard_message_id FROM starboard WHERE message_id = ?", (message.id,)) as cursor:
+            row = await cursor.fetchone()
+        
+        starboard_channel = discord.utils.get(message.guild.text_channels, name="starboard")
+        
+        # Create channel if not exists
+        if not starboard_channel:
+            try:
+                starboard_channel = await message.guild.create_text_channel("starboard")
+            except:
+                return # Missing permissions
+
+        embed = discord.Embed(description=message.content, color=discord.Color.gold())
+        embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
+        embed.add_field(name="Source", value=f"[Jump to Message]({message.jump_url})")
+        if message.attachments:
+            embed.set_image(url=message.attachments[0].url)
+        embed.set_footer(text=f"⭐ {reaction.count} | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
+
+        if row:
+            # Update existing
+            try:
+                sb_msg = await starboard_channel.fetch_message(row[0])
+                await sb_msg.edit(embed=embed)
+            except:
+                pass # Message deleted
+        else:
+            # Post new
+            sb_msg = await starboard_channel.send(embed=embed)
+            await self.bot.db.execute("INSERT INTO starboard (message_id, starboard_message_id) VALUES (?, ?)", (message.id, sb_msg.id))
+            await self.bot.db.commit()
+
+    # --- Birthdays ---
+    @commands.hybrid_group(name="birthday", invoke_without_command=True, description="Manage birthdays.")
+    async def birthday(self, ctx):
+        await ctx.send("Use `/birthday set <MM-DD>` or `/birthday list`.")
+
+    @birthday.command(description="Set your birthday (MM-DD).")
+    async def set(self, ctx, date: str):
+        try:
+            month, day = map(int, date.split("-"))
+            datetime.date(2000, month, day) # Validate date
+        except ValueError:
+            await ctx.send("Invalid format. Use MM-DD (e.g., 12-25).")
+            return
+
+        await self.bot.db.execute("INSERT OR REPLACE INTO birthdays (user_id, month, day) VALUES (?, ?, ?)", (ctx.author.id, month, day))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Birthday set to **{month}/{day}**!")
+
+    @birthday.command(name="list", description="List upcoming birthdays.")
+    async def list_birthdays(self, ctx):
+        async with self.bot.db.execute("SELECT user_id, month, day FROM birthdays ORDER BY month, day") as cursor:
+            rows = await cursor.fetchall()
+        
+        if not rows:
+            await ctx.send("No birthdays set.")
+            return
+
+        embed = discord.Embed(title="🎂 Upcoming Birthdays", color=discord.Color.pink())
+        today = datetime.date.today()
+        
+        count = 0
+        for uid, m, d in rows:
+            bday = datetime.date(today.year, m, d)
+            if bday < today: bday = datetime.date(today.year + 1, m, d)
+            
+            if (bday - today).days <= 30: # Show next 30 days
+                user = ctx.guild.get_member(uid)
+                name = user.display_name if user else f"User {uid}"
+                embed.add_field(name=f"{m}/{d}", value=name, inline=True)
+                count += 1
+        
+        if count == 0:
+            embed.description = "No birthdays in the next 30 days."
+        
+        await ctx.send(embed=embed)
+
 async def setup(bot):
     await bot.add_cog(Community(bot))

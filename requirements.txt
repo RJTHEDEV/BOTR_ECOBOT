@@ -7,3 +7,5 @@ pandas
 mplfinance
 aiofiles
 aiohttp
+tweepy
+

@@ -6,6 +6,7 @@ import asyncio
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.sniped_messages = {}
 
     async def log_mod_action(self, guild, embed):
         """Helper to log mod actions using the Logging cog if available."""
@@ -107,6 +108,55 @@ class Moderation(commands.Cog):
         
         await self.log_mod_action(ctx.guild, embed)
 
+        # Automated Actions
+        async with self.bot.db.execute("SELECT COUNT(*) FROM infractions WHERE guild_id = ? AND user_id = ? AND type = 'Warn'", (ctx.guild.id, member.id)) as cursor:
+            row = await cursor.fetchone()
+            warn_count = row[0] if row else 0
+        
+        if warn_count % 3 == 0:
+            # Mute for 1 hour
+            duration = datetime.timedelta(hours=1)
+            try:
+                await member.timeout(duration, reason="Automated Action: 3 Warns")
+                await ctx.send(f"🚫 **Automated Action:** {member.mention} has been muted for 1 hour due to reaching {warn_count} warns.")
+            except Exception as e:
+                await ctx.send(f"⚠️ Failed to apply automated mute: {e}")
+
+    @commands.hybrid_command(description="Lockdown the current channel.")
+    @commands.has_permissions(manage_channels=True)
+    async def lockdown(self, ctx):
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+        await ctx.send("🔒 **Channel Locked.**")
+
+    @commands.hybrid_command(description="Unlock the current channel.")
+    @commands.has_permissions(manage_channels=True)
+    async def unlock(self, ctx):
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None)
+        await ctx.send("🔓 **Channel Unlocked.**")
+
+    @commands.hybrid_command(description="Snipe the last deleted message.")
+    @commands.has_permissions(manage_messages=True)
+    async def snipe(self, ctx):
+        if ctx.channel.id not in self.sniped_messages:
+            await ctx.send("Nothing to snipe here.")
+            return
+        
+        msg_data = self.sniped_messages[ctx.channel.id]
+        embed = discord.Embed(description=msg_data['content'], color=discord.Color.dark_teal(), timestamp=msg_data['time'])
+        embed.set_author(name=msg_data['author'].display_name, icon_url=msg_data['author'].display_avatar.url)
+        embed.set_footer(text="Sniped Message")
+        
+        await ctx.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_message_delete(self, message):
+        if message.author.bot: return
+        self.sniped_messages[message.channel.id] = {
+            'content': message.content,
+            'author': message.author,
+            'time': message.created_at
+        }
+
     @commands.hybrid_command(description="View user infraction history.")
     @commands.has_permissions(manage_messages=True)
     async def history(self, ctx, member: discord.Member):
@@ -189,6 +239,32 @@ class Moderation(commands.Cog):
             if roles_to_add:
                 try:
                     await member.add_roles(*roles_to_add)
+                except:
+                    pass
+
+    # --- Auto-Moderation ---
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot or not message.guild: return
+
+        # Bad Words List (Expand as needed)
+        BANNED_WORDS = ["badword1", "badword2", "scam_link_example.com"] 
+        
+        content = message.content.lower()
+        for word in BANNED_WORDS:
+            if word in content:
+                try:
+                    await message.delete()
+                    await message.channel.send(f"{message.author.mention}, that language is not allowed here!", delete_after=5)
+                    
+                    # Log it
+                    embed = discord.Embed(description=f"**Auto-Mod: Message Deleted**", color=discord.Color.red())
+                    embed.add_field(name="User", value=message.author.mention)
+                    embed.add_field(name="Content", value=message.content) # Be careful logging bad words openly if public log
+                    embed.set_footer(text=f"Channel: {message.channel.name}")
+                    await self.log_mod_action(message.guild, embed)
+                    
+                    return # Stop processing
                 except:
                     pass
 
