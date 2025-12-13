@@ -353,6 +353,17 @@ class BOTR(commands.Bot):
                     starboard_message_id INTEGER
                 )
             ''')
+            # Transaction Logs Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS transaction_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    type TEXT, -- 'daily', 'work', 'shop', etc.
+                    amount INTEGER,
+                    description TEXT,
+                    timestamp TEXT
+                )
+            ''')
         await self.db.commit()
 
     async def close(self):

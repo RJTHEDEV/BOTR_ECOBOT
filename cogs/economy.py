@@ -20,6 +20,90 @@ class Economy(commands.Cog):
         self.voice_tracking = {}
         self.last_xp_time = {} # {user_id: timestamp}
 
+    async def log_transaction(self, user_id, type, amount, description):
+        timestamp = datetime.datetime.now().isoformat()
+        await self.bot.db.execute("INSERT INTO transaction_logs (user_id, type, amount, description, timestamp) VALUES (?, ?, ?, ?, ?)", 
+                                  (user_id, type, amount, description, timestamp))
+        await self.bot.db.commit()
+
+    @commands.hybrid_command(name="currencylog", aliases=["cl"], description="View your currency transaction history.")
+    async def currencylog(self, ctx, page: int = 1):
+        if page < 1: page = 1
+        per_page = 10
+        offset = (page - 1) * per_page
+
+        async with self.bot.db.execute("SELECT COUNT(*) FROM transaction_logs WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            total_logs = (await cursor.fetchone())[0]
+        
+        if total_logs == 0:
+            await ctx.send("No transaction history found.")
+            return
+
+        total_pages = (total_logs + per_page - 1) // per_page
+        if page > total_pages:
+            await ctx.send(f"Page {page} does not exist. Total pages: {total_pages}")
+            return
+
+        async with self.bot.db.execute("SELECT type, amount, description, timestamp FROM transaction_logs WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?", (ctx.author.id, per_page, offset)) as cursor:
+            logs = await cursor.fetchall()
+        
+        embed = discord.Embed(title=f"📜 Currency Log: {ctx.author.display_name}", color=discord.Color.blue())
+        
+        desc = ""
+        for type, amount, description, timestamp in logs:
+            amount_str = f"+${amount}" if amount >= 0 else f"-${abs(amount)}"
+            emoji = "🟢" if amount >= 0 else "🔴"
+            dt = datetime.datetime.fromisoformat(timestamp)
+            date_str = f"<t:{int(dt.timestamp())}:f>"
+            
+            desc += f"{emoji} **{type.title()}** ({amount_str})\n{description} • {date_str}\n\n"
+        
+        embed.description = desc
+        embed.set_footer(text=f"Page {page}/{total_pages} | Total: {total_logs}")
+        await ctx.send(embed=embed)
+
+    async def log_transaction(self, user_id, type, amount, description):
+        timestamp = datetime.datetime.now().isoformat()
+        await self.bot.db.execute("INSERT INTO transaction_logs (user_id, type, amount, description, timestamp) VALUES (?, ?, ?, ?, ?)", 
+                                  (user_id, type, amount, description, timestamp))
+        await self.bot.db.commit()
+
+    @commands.hybrid_command(name="currencylog", aliases=["cl"], description="View your currency transaction history.")
+    async def currencylog(self, ctx, page: int = 1):
+        if page < 1: page = 1
+        per_page = 10
+        offset = (page - 1) * per_page
+
+        async with self.bot.db.execute("SELECT COUNT(*) FROM transaction_logs WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            total_logs = (await cursor.fetchone())[0]
+        
+        if total_logs == 0:
+            await ctx.send("No transaction history found.")
+            return
+
+        total_pages = (total_logs + per_page - 1) // per_page
+        if page > total_pages:
+            await ctx.send(f"Page {page} does not exist. Total pages: {total_pages}")
+            return
+
+        async with self.bot.db.execute("SELECT type, amount, description, timestamp FROM transaction_logs WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?", (ctx.author.id, per_page, offset)) as cursor:
+            logs = await cursor.fetchall()
+        
+        embed = discord.Embed(title=f"📜 Currency Log: {ctx.author.display_name}", color=discord.Color.blue())
+        
+        desc = ""
+        for type, amount, description, timestamp in logs:
+            amount_str = f"+${amount}" if amount >= 0 else f"-${abs(amount)}"
+            emoji = "🟢" if amount >= 0 else "🔴"
+            dt = datetime.datetime.fromisoformat(timestamp)
+            date_str = f"<t:{int(dt.timestamp())}:f>"
+            
+            desc += f"{emoji} **{type.title()}** ({amount_str})\n{description} • {date_str}\n\n"
+        
+        embed.description = desc
+        embed.set_footer(text=f"Page {page}/{total_pages} | Total: {total_logs}")
+        await ctx.send(embed=embed)
+
     async def add_xp(self, user, amount):
         if user.bot: return
 
@@ -40,7 +124,7 @@ class Economy(commands.Cog):
         
         # Level Up Check
         new_xp = current_xp + amount
-        xp_needed = 100 * current_level
+        xp_needed = 250 * current_level
         
         if new_xp >= xp_needed:
             new_level = current_level + 1
@@ -137,6 +221,7 @@ class Economy(commands.Cog):
                 
                 await self.bot.db.execute("UPDATE users SET balance = balance + ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
                                           (total_amount, today, streak, ctx.author.id))
+                await self.log_transaction(ctx.author.id, "daily", total_amount, f"Daily reward (Streak: {streak})")
         
         await self.bot.db.commit()
         
@@ -160,6 +245,7 @@ class Economy(commands.Cog):
             else:
                 await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, member.id))
         await self.bot.db.commit()
+        await self.log_transaction(member.id, "admin_give", amount, "Admin gave coins")
         await ctx.send(f"Gave ${amount} to {member.mention}.")
 
     @commands.hybrid_command(description="Admin: Give tickets to a user.")
@@ -244,6 +330,7 @@ class Economy(commands.Cog):
         earnings = random.randint(50, 200)
         await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
         await self.bot.db.commit()
+        await self.log_transaction(ctx.author.id, "work", earnings, "Worked a shift")
         await ctx.send(f"🔨 You worked hard and earned **${earnings}**!")
 
     @commands.hybrid_command(description="Commit a crime (High risk/reward) (2h cooldown).")
@@ -253,11 +340,13 @@ class Economy(commands.Cog):
             earnings = random.randint(300, 800)
             await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
             await self.bot.db.commit()
+            await self.log_transaction(ctx.author.id, "crime", earnings, "Crime success")
             await ctx.send(f"🕵️ You successfully committed a crime and stole **${earnings}**!")
         else:
             fine = random.randint(100, 300)
             await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
             await self.bot.db.commit()
+            await self.log_transaction(ctx.author.id, "crime", -fine, "Crime caught (fine)")
             await ctx.send(f"🚓 You got caught! You paid a fine of **${fine}**.")
 
     @commands.hybrid_command(description="Rob another user (Chance to fail).")
@@ -285,6 +374,7 @@ class Economy(commands.Cog):
                     fine = random.randint(200, 1000)
                     await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
                     await self.bot.db.commit()
+                    await self.log_transaction(ctx.author.id, "rob", -fine, "Robbery failed (Safe Alarm)")
                     await ctx.send(f"🔒 **Safe Protected!** You triggered the alarm and paid a **${fine}** fine.")
                     return
 
@@ -293,11 +383,14 @@ class Economy(commands.Cog):
             await self.bot.db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (steal_amount, target.id))
             await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (steal_amount, ctx.author.id))
             await self.bot.db.commit()
+            await self.log_transaction(target.id, "rob", -steal_amount, f"Robbed by {ctx.author.display_name}")
+            await self.log_transaction(ctx.author.id, "rob", steal_amount, f"Robbed {target.display_name}")
             await ctx.send(f"😈 You robbed {target.mention} and stole **${steal_amount}**!")
         else:
             fine = random.randint(100, 500)
             await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
             await self.bot.db.commit()
+            await self.log_transaction(ctx.author.id, "rob", -fine, f"Robbery failed - Target: {target.display_name}")
             await ctx.send(f"🛡️ You failed to rob {target.mention} and paid a fine of **${fine}**.")
 
     # --- Social ---
@@ -335,20 +428,75 @@ class Economy(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.hybrid_command(description="View the XP Leaderboard.")
-    async def leaderboard(self, ctx):
-        async with self.bot.db.execute("SELECT user_id, xp, level FROM users ORDER BY xp DESC LIMIT 10") as cursor:
-            rows = await cursor.fetchall()
+    async def leaderboard(self, ctx, page: int = 1):
+        if page < 1: page = 1
+        per_page = 10
+        offset = (page - 1) * per_page
         
-        if not rows:
-            await ctx.send("No data yet.")
+        async with self.bot.db.execute("SELECT COUNT(*) FROM users") as cursor:
+            total_users = (await cursor.fetchone())[0]
+            
+        total_pages = (total_users + per_page - 1) // per_page
+        if not total_pages: total_pages = 1
+        
+        if page > total_pages:
+            await ctx.send(f"Page {page} does not exist. Total pages: {total_pages}")
             return
 
+        async with self.bot.db.execute("SELECT user_id, xp, level FROM users ORDER BY xp DESC LIMIT ? OFFSET ?", (per_page, offset)) as cursor:
+            rows = await cursor.fetchall()
+        
         embed = discord.Embed(title="🏆 XP Leaderboard", color=discord.Color.gold())
         for i, (user_id, xp, level) in enumerate(rows, 1):
+            rank = offset + i
             user = ctx.guild.get_member(user_id)
             name = user.display_name if user else f"User {user_id}"
-            embed.add_field(name=f"#{i} {name}", value=f"Level {level} | {xp} XP", inline=False)
+            embed.add_field(name=f"#{rank} {name}", value=f"Level {level} | {xp} XP", inline=False)
         
+        embed.set_footer(text=f"Page {page}/{total_pages} | Use !leaderboard <page>")
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command(description="Compare your stats with another user.")
+    async def compare(self, ctx, target: discord.Member):
+        if target.bot:
+            await ctx.send("Cannot compare with bots.")
+            return
+
+        # Fetch Data
+        async def get_stats(user_id):
+            async with self.bot.db.execute("SELECT balance, bank, xp, level, reputation FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                row = await cursor.fetchone()
+                if not row: return (0, 0, 0, 1, 0)
+                return row
+
+        u1_stats = await get_stats(ctx.author.id)
+        u2_stats = await get_stats(target.id)
+
+        u1_bal, u1_bank, u1_xp, u1_level, u1_rep = u1_stats
+        u2_bal, u2_bank, u2_xp, u2_level, u2_rep = u2_stats
+
+        u1_net = u1_bal + u1_bank
+        u2_net = u2_bal + u2_bank
+
+        def cmp(v1, v2):
+            if v1 > v2: return "👑", ""
+            elif v2 > v1: return "", "👑"
+            return "", ""
+
+        c_bal = cmp(u1_bal, u2_bal)
+        c_bank = cmp(u1_bank, u2_bank)
+        c_net = cmp(u1_net, u2_net)
+        c_xp = cmp(u1_xp, u2_xp)
+        c_level = cmp(u1_level, u2_level)
+        c_rep = cmp(u1_rep, u2_rep)
+
+        embed = discord.Embed(title=f"⚔️ Comparison: {ctx.author.display_name} vs {target.display_name}", color=discord.Color.magenta())
+        
+        # Table-like format
+        embed.add_field(name="Category", value="**Level**\n**XP**\n**Balance**\n**Bank**\n**Net Worth**\n**Reputation**", inline=True)
+        embed.add_field(name=ctx.author.display_name, value=f"{c_level[0]} {u1_level}\n{c_xp[0]} {u1_xp}\n{c_bal[0]} ${u1_bal}\n{c_bank[0]} ${u1_bank}\n{c_net[0]} ${u1_net}\n{c_rep[0]} {u1_rep}", inline=True)
+        embed.add_field(name=target.display_name, value=f"{c_level[1]} {u2_level}\n{c_xp[1]} {u2_xp}\n{c_bal[1]} ${u2_bal}\n{c_bank[1]} ${u2_bank}\n{c_net[1]} ${u2_net}\n{c_rep[1]} {u2_rep}", inline=True)
+
         await ctx.send(embed=embed)
 
     @commands.Cog.listener()
@@ -360,7 +508,7 @@ class Economy(commands.Cog):
         last_time = self.last_xp_time.get(message.author.id, 0)
         
         if now - last_time >= 60:
-            xp_amount = random.randint(15, 25)
+            xp_amount = random.randint(10, 20)
             await self.add_xp(message.author, xp_amount)
             self.last_xp_time[message.author.id] = now
 

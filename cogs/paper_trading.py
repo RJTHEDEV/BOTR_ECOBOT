@@ -41,6 +41,7 @@ class PaperTrading(commands.Cog):
             
         # Deduct balance
         await self.bot.db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (total_cost, ctx.author.id))
+        await self.bot.get_cog("Economy").log_transaction(ctx.author.id, "paper_trading", -total_cost, f"Bought {shares} {ticker} @ ${price:.2f}")
         
         # Update portfolio
         async with self.bot.db.execute("SELECT avg_price, shares FROM portfolio WHERE user_id = ? AND ticker = ?", (ctx.author.id, ticker)) as cursor:
@@ -90,6 +91,7 @@ class PaperTrading(commands.Cog):
             
         # Add balance
         await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (total_value, ctx.author.id))
+        await self.bot.get_cog("Economy").log_transaction(ctx.author.id, "paper_trading", total_value, f"Sold {shares} {ticker} @ ${price:.2f}")
         await self.bot.db.commit()
         
         # Calculate P/L

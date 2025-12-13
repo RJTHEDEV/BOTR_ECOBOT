@@ -40,6 +40,7 @@ class Store(commands.Cog):
                 await ctx.send("You don't have enough money!")
                 return
             await self.bot.db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, ctx.author.id))
+            await self.bot.get_cog("Economy").log_transaction(ctx.author.id, "shop", -price, f"Bought {item_name}")
         else: # tickets
             async with self.bot.db.execute("SELECT tickets FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
                 user = await cursor.fetchone()
@@ -48,6 +49,7 @@ class Store(commands.Cog):
                 await ctx.send("You don't have enough tickets!")
                 return
             await self.bot.db.execute("UPDATE users SET tickets = tickets - ? WHERE user_id = ?", (price, ctx.author.id))
+            await self.bot.get_cog("Economy").log_transaction(ctx.author.id, "shop (tickets)", -price, f"Bought {item_name}")
 
         # Add to inventory
         async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = ?", (ctx.author.id, item_name)) as cursor:

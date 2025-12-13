@@ -13,7 +13,7 @@ class HelpSelect(discord.ui.Select):
         
         # Curated descriptions for cogs
         COG_DESCRIPTIONS = {
-            "Economy": "Manage your wealth, work jobs, and rob others.",
+            "Economy": "Manage wealth, jobs, xp leaderboard, and robbing.",
             "Market": "Real-time stock/crypto prices, charts, and news.",
             "Community": "Social features, reputation, and server events.",
             "Moderation": "Admin tools to kick, ban, and manage the server.",
@@ -25,7 +25,13 @@ class HelpSelect(discord.ui.Select):
             "Store": "Buy items and upgrades with your coins.",
             "Streamers": "Live stream alerts for Twitch/YouTube.",
             "Tickets": "Support ticket system for members.",
-            "Voice": "Dynamic voice channel management."
+            "Voice": "Dynamic voice channel management.",
+            "External": "News headlines and Twitter integration.",
+            "Help": "Shows this help menu.",
+            "Options": "Trade stock options (calls/puts) and check expiry.",
+            "PaperTrading": "Simulate stock trading without real money.",
+            "Utility": "User info, server info, and avatar lookup.",
+            "Games": "Social games like Connect 4 and Tic-Tac-Toe."
         }
 
         # Filter cogs that have commands
@@ -46,7 +52,14 @@ class HelpSelect(discord.ui.Select):
             elif label == "Gambling": emoji = "🎰"
             elif label == "Store": emoji = "🛒"
             elif label == "Tickets": emoji = "🎫"
+            elif label == "Tickets": emoji = "🎫"
             elif label == "Streamers": emoji = "📺"
+            elif label == "External": emoji = "🌐"
+            elif label == "Help": emoji = "ℹ️"
+            elif label == "Options": emoji = "📉"
+            elif label == "PaperTrading": emoji = "📝"
+            elif label == "Utility": emoji = "🛠️"
+            elif label == "Games": emoji = "🎮"
             
             options.append(discord.SelectOption(label=label, description=desc[:100], emoji=emoji, value=label))
 
@@ -56,7 +69,7 @@ class HelpSelect(discord.ui.Select):
         value = self.values[0]
         
         if value == "home":
-            embed = Embeds.default("🤖 BOTR Help", "Select a category below to view commands.")
+            embed = Embeds.default("🤖 ALL WITH TIME Help", "Select a category below to view commands.")
             embed.add_field(name="Stats", value=f"Servers: {len(self.bot.guilds)}\nLatency: {round(self.bot.latency * 1000)}ms")
             await interaction.response.edit_message(embed=embed)
             return
@@ -102,7 +115,7 @@ class Help(commands.Cog):
         
         view = HelpView(self.bot, mapping)
         
-        embed = Embeds.default("🤖 BOTR Help", "Select a category below to view commands.")
+        embed = Embeds.default("🤖 ALL WITH TIME Help", "Select a category below to view commands.")
         embed.add_field(name="Stats", value=f"Servers: {len(self.bot.guilds)}\nLatency: {round(self.bot.latency * 1000)}ms")
         
         await ctx.send(embed=embed, view=view)

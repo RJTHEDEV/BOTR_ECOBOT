@@ -12,11 +12,12 @@ class Gambling(commands.Cog):
             row = await cursor.fetchone()
             return row[0] if row else 0
 
-    async def update_balance(self, user_id, amount):
+    async def update_balance(self, user_id, amount, description="Gambling"):
         async with self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id)) as cursor:
             if cursor.rowcount == 0:
                 await self.bot.db.execute("INSERT INTO users (user_id, balance) VALUES (?, ?)", (user_id, amount))
         await self.bot.db.commit()
+        await self.bot.get_cog("Economy").log_transaction(user_id, "gambling", amount, description)
 
     @commands.hybrid_command(description="Flip a coin to double your bet.")
     async def coinflip(self, ctx, amount: int, choice: str):
@@ -174,6 +175,78 @@ class Gambling(commands.Cog):
             await ctx.send("🤝 Push! Your bet is returned.")
         else:
             await ctx.send(f"📉 Dealer wins. You lost **${amount}**.")
+
+            await ctx.send(f"📉 Dealer wins. You lost **${amount}**.")
+
+    @commands.hybrid_command(description="Guess if the next number (1-100) is higher or lower.")
+    async def highlow(self, ctx, amount: int, choice: str):
+        if amount <= 0: return await ctx.send("Amount must be positive.")
+        
+        balance = await self.get_balance(ctx.author.id)
+        if balance < amount: return await ctx.send("Insufficient funds.")
+
+        choice = choice.lower()
+        if choice not in ["higher", "lower", "high", "low"]:
+            return await ctx.send("Choice must be 'higher' or 'lower'.")
+        
+        # Deduct bet
+        await self.update_balance(ctx.author.id, -amount, "HighLow Bet")
+
+        current = random.randint(1, 100)
+        await ctx.send(f"Current number is **{current}**. Will the next be higher or lower?")
+        await asyncio.sleep(2)
+
+        next_num = random.randint(1, 100)
+        
+        win = False
+        if choice.startswith("h"):
+            if next_num > current: win = True
+        else:
+            if next_num < current: win = True
+            
+        if next_num == current:
+            # Push
+            await self.update_balance(ctx.author.id, amount, "HighLow Push")
+            await ctx.send(f"The number was **{next_num}**. It's a tie! Bet returned.")
+            return
+
+        if win:
+            winnings = int(amount * 1.8) # 1.8x multiplier
+            await self.update_balance(ctx.author.id, winnings, "HighLow Win")
+            await ctx.send(f"The number was **{next_num}**. You won **${winnings}**!")
+        else:
+            await ctx.send(f"The number was **{next_num}**. You lost **${amount}**.")
+
+    @commands.hybrid_command(description="Roll two dice. Pairs win!")
+    async def snakeeyes(self, ctx, amount: int):
+        if amount <= 0: return await ctx.send("Amount must be positive.")
+        
+        balance = await self.get_balance(ctx.author.id)
+        if balance < amount: return await ctx.send("Insufficient funds.")
+
+        # Deduct bet
+        await self.update_balance(ctx.author.id, -amount, "SnakeEyes Bet")
+
+        d1 = random.randint(1, 6)
+        d2 = random.randint(1, 6)
+        
+        msg = await ctx.send("🎲 Rolling...")
+        await asyncio.sleep(1)
+        
+        await msg.edit(content=f"🎲 You rolled **{d1}** and **{d2}**!")
+        
+        if d1 == 1 and d2 == 1:
+            # Snake Eyes (30x)
+            winnings = amount * 30
+            await self.update_balance(ctx.author.id, winnings, "SnakeEyes Jackpot")
+            await ctx.send(f"🐍 **SNAKE EYES!** You won **${winnings}** (30x)!")
+        elif d1 == d2:
+            # Pair (5x)
+            winnings = amount * 5
+            await self.update_balance(ctx.author.id, winnings, "SnakeEyes Pair")
+            await ctx.send(f"🎉 **PAIR!** You won **${winnings}** (5x)!")
+        else:
+            await ctx.send(f"😢 No pair. You lost **${amount}**.")
 
 async def setup(bot):
     await bot.add_cog(Gambling(bot))
