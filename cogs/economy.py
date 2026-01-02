@@ -4,6 +4,59 @@ import random
 import time
 import datetime
 
+LEVEL_UP_MESSAGES = [
+    "🎉 **Level Up!** Way to go, {user}! You've reached Level {level}!",
+    "🚀 **Boom!** {user} just hit Level {level}! Keep soaring!",
+    "🌟 **Shining Bright!** {user}, you're now Level {level}!",
+    "🔥 **On Fire!** {user} crushed it and reached Level {level}!",
+    "💪 **Stronger!** {user} is now Level {level}! Unstoppable!",
+    "🎈 **Celebrate!** {user} has ascended to Level {level}!",
+    "✨ **Magic Moment!** {user} is officially Level {level}!",
+    "👑 **Royalty!** {user} has climbed to Level {level}!",
+    "⚡ **Electric!** {user} powered up to Level {level}!",
+    "🎸 **Rockstar!** {user} smashed their way to Level {level}!",
+    "💎 **Precious!** {user} is now a Level {level} gem!",
+    "🌈 **Colorful!** {user} reached Level {level}! Amazing!",
+    "🏆 **Champion!** {user} takes the trophy at Level {level}!",
+    "🍕 **Party Time!** {user} is Level {level}! Pizza for everyone!",
+    "🌊 **Wave Rider!** {user} surfed to Level {level}!",
+    "🤖 **Beep Boop!** {user} upgraded to Level {level}!",
+    "🍩 **Sweet!** {user} is Level {level}! Delicious victory!",
+    "🤠 **Yeehaw!** {user} wrangled Level {level}!",
+    "👻 **Spooky Good!** {user} is scarily good at Level {level}!",
+    "🐉 **Legendary!** {user} has evolved to Level {level}!",
+    "🛸 **Out of this World!** {user} is Level {level}!",
+    "🍦 **Cool!** {user} chilled their way to Level {level}!",
+    "🎯 **Bullseye!** {user} hit the mark at Level {level}!",
+    "🎲 **Jackpot!** {user} rolled a Level {level}!",
+    "⚓ **Ahoy!** {user} sailed to Level {level}!",
+    "🏰 **King of the Castle!** {user} reached Level {level}!",
+    "🌠 **Stralight!** {user} shines at Level {level}!",
+    "🌋 **Eruption!** {user} exploded to Level {level}!",
+    "🥝 **Juicy!** {user} is fresh at Level {level}!",
+    "🍄 **Power Up!** {user} grew to Level {level}!",
+    "🚲 **Zoom!** {user} raced to Level {level}!",
+    "🥊 **Knockout!** {user} fought to Level {level}!",
+    "🎓 **Smart!** {user} graduated to Level {level}!",
+    "🦜 **Squawk!** {user} flew to Level {level}!",
+    "🧩 **Solved!** {user} pieced together Level {level}!",
+    "🌞 **Sunny!** {user} brightened up to Level {level}!",
+    "🌙 **Moonlight!** {user} glows at Level {level}!",
+    "🍭 **Sugar Rush!** {user} sprinted to Level {level}!",
+    "🚗 **Vroom!** {user} drove to Level {level}!",
+    "🪐 **Galactic!** {user} orbits Level {level}!",
+    "🏔️ **Summit!** {user} climbed to Level {level}!",
+    "🕹️ **Game Over? No!** {user} leveled up to {level}!",
+    "🎨 **Masterpiece!** {user} painted Level {level}!",
+    "🎭 **Encore!** {user} performed perfectly to Level {level}!",
+    "🎪 **Showtime!** {user} is the star at Level {level}!",
+    "🎡 **High Flyer!** {user} reached new heights at Level {level}!",
+    "🎰 **Winner!** {user} hit the Level {level} jackpot!",
+    "🧬 **Evolved!** {user} DNA upgraded to Level {level}!",
+    "🧪 **Experiment Success!** {user} results: Level {level}!",
+    "🔮 **Destiny!** {user} was meant to be Level {level}!"
+]
+
 LEVEL_ROLES = {
     1: "Level 1",
     5: "Level 5",
@@ -133,7 +186,8 @@ class Economy(commands.Cog):
             
             # Announce Level Up
             try:
-                await user.send(f"🎉 **Level Up!** You are now Level {new_level}!")
+                msg = random.choice(LEVEL_UP_MESSAGES).format(user=user.mention, level=new_level)
+                await user.send(msg)
             except:
                 pass
 

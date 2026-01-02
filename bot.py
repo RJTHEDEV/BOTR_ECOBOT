@@ -9,6 +9,8 @@ import traceback
 import datetime
 from utils.embeds import Embeds
 import difflib
+import atexit
+import subprocess
 
 load_dotenv()
 
@@ -418,7 +420,55 @@ class BOTR(commands.Bot):
 
 bot = BOTR()
 
+def cleanup_lock():
+    """Removes the lock file on exit."""
+    if os.path.exists("bot.lock"):
+        try:
+            os.remove("bot.lock")
+        except OSError:
+            pass
+
+def check_single_instance():
+    """Checks for an existing lock file and verifies if the process is actually running."""
+    lock_file = "bot.lock"
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file, "r") as f:
+                content = f.read().strip()
+                if content:
+                    pid = int(content)
+                    try:
+                        # Check if process exists.
+                        if sys.platform == 'win32':
+                            cmd = f'tasklist /FI "PID eq {pid}"'
+                            output = subprocess.check_output(cmd, creationflags=0x08000000).decode()
+                            if str(pid) in output:
+                                print(f"Error: Bot is already running (PID: {pid}). Aborting start.")
+                                sys.exit(1)
+                            else:
+                                raise OSError("Process not found")
+                        else:
+                            os.kill(pid, 0)
+                            print(f"Error: Bot is already running (PID: {pid}). Aborting start.")
+                            sys.exit(1)
+                    except (OSError, subprocess.CalledProcessError):
+                        # Process dead or access denied (unlikely for own bot unless different user).
+                        # We treat OSError usually as "process not found" for signal 0.
+                        print(f"Found stale lock file for PID {pid}. Taking over.")
+        except (ValueError, IOError) as e:
+             print(f"Error reading lock file: {e}. Overwriting.")
+
+    # Write current PID
+    try:
+        with open(lock_file, "w") as f:
+            f.write(str(os.getpid()))
+        atexit.register(cleanup_lock)
+    except IOError as e:
+        print(f"Could not write lock file: {e}")
+        sys.exit(1)
+
 if __name__ == '__main__':
+    check_single_instance()
     if not TOKEN:
         print("Error: DISCORD_TOKEN not found in .env")
     else:

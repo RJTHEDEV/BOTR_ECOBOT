@@ -213,6 +213,37 @@ class Moderation(commands.Cog):
                     pass
         await msg.edit(content=f"✅ Removed {role.mention} from {count} members.")
 
+    # --- Utility ---
+    @commands.hybrid_command(name="say", aliases=["announce"], description="Make the bot say something.")
+    @commands.has_permissions(administrator=True)
+    async def say(self, ctx, channel: discord.TextChannel = None, *, message: str = None, attachment: discord.Attachment = None):
+        target_channel = channel or ctx.channel
+        
+        # Try to delete original if text command
+        if ctx.interaction is None:
+            try:
+                await ctx.message.delete()
+            except:
+                pass
+        else:
+            await ctx.send("Sent.", ephemeral=True, delete_after=0)
+
+        files = []
+        # Check explicit attachment argument (Slash)
+        if attachment:
+            files.append(await attachment.to_file())
+        
+        # Check message attachments (Prefix)
+        if ctx.message.attachments:
+            for a in ctx.message.attachments:
+                files.append(await a.to_file())
+
+        if not message and not files:
+             await ctx.send("Please provide a message or attachment.", ephemeral=True)
+             return
+
+        await target_channel.send(content=message, files=files)
+
     # --- Sticky Roles ---
     @commands.Cog.listener()
     async def on_member_remove(self, member):
