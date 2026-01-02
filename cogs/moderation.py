@@ -3,6 +3,7 @@ from discord.ext import commands
 import datetime
 import asyncio
 import typing
+import re
 
 class Moderation(commands.Cog):
     def __init__(self, bot):
@@ -217,17 +218,23 @@ class Moderation(commands.Cog):
     # --- Utility ---
     @commands.hybrid_command(name="say", aliases=["announce"], description="Make the bot say something.")
     @commands.has_permissions(administrator=True)
-    async def say(self, ctx, channel_or_message: typing.Union[discord.TextChannel, str] = None, *, message: str = None, attachment: discord.Attachment = None):
+    async def say(self, ctx, *, message: str = None, attachment: discord.Attachment = None):
         target_channel = ctx.channel
-        content = ""
+        content = message
 
-        if isinstance(channel_or_message, discord.TextChannel):
-            target_channel = channel_or_message
-        elif isinstance(channel_or_message, str):
-             content = channel_or_message
-        
-        if message:
-            content = f"{content} {message}" if content else message
+        # Manual Channel Parsing
+        if content:
+            # Check for <#123456789> at start
+            match = re.match(r"^<#(\d+)>\s*(.*)", content)
+            if match:
+                try:
+                    channel_id = int(match.group(1))
+                    channel = ctx.guild.get_channel(channel_id)
+                    if channel and isinstance(channel, discord.TextChannel):
+                        target_channel = channel
+                        content = match.group(2)
+                except:
+                    pass # Fallback to sending as plain text
         
         # Try to delete original if text command
         if ctx.interaction is None:
