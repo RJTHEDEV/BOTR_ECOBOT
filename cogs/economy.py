@@ -177,7 +177,7 @@ class Economy(commands.Cog):
         
         # Level Up Check
         new_xp = current_xp + amount
-        xp_needed = 250 * current_level
+        xp_needed = 75 * (current_level ** 2)
         
         if new_xp >= xp_needed:
             new_level = current_level + 1
