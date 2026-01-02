@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import datetime
 import asyncio
+import typing
 
 class Moderation(commands.Cog):
     def __init__(self, bot):
@@ -216,8 +217,17 @@ class Moderation(commands.Cog):
     # --- Utility ---
     @commands.hybrid_command(name="say", aliases=["announce"], description="Make the bot say something.")
     @commands.has_permissions(administrator=True)
-    async def say(self, ctx, channel: discord.TextChannel = None, *, message: str = None, attachment: discord.Attachment = None):
-        target_channel = channel or ctx.channel
+    async def say(self, ctx, channel_or_message: typing.Union[discord.TextChannel, str] = None, *, message: str = None, attachment: discord.Attachment = None):
+        target_channel = ctx.channel
+        content = ""
+
+        if isinstance(channel_or_message, discord.TextChannel):
+            target_channel = channel_or_message
+        elif isinstance(channel_or_message, str):
+             content = channel_or_message
+        
+        if message:
+            content = f"{content} {message}" if content else message
         
         # Try to delete original if text command
         if ctx.interaction is None:
@@ -238,11 +248,11 @@ class Moderation(commands.Cog):
             for a in ctx.message.attachments:
                 files.append(await a.to_file())
 
-        if not message and not files:
+        if not content and not files:
              await ctx.send("Please provide a message or attachment.", ephemeral=True)
              return
 
-        await target_channel.send(content=message, files=files)
+        await target_channel.send(content=content, files=files)
 
     # --- Sticky Roles ---
     @commands.Cog.listener()
