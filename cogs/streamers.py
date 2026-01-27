@@ -170,6 +170,46 @@ class Streamers(commands.Cog):
             pass
         return False, None, None, None, None, None
 
+    async def send_notification(self, channel, platform, username, stream_info, is_going_live):
+        stream_url = f"https://www.{platform}.com/{username}"
+        if platform == "kick": stream_url = f"https://kick.com/{username}"
+        elif platform == "youtube": stream_url = f"https://youtube.com/{username}"
+        
+        if is_going_live:
+            title = stream_info.get('title', 'Live Stream')
+            thumbnail_url = stream_info.get('thumbnail')
+            game_name = stream_info.get('game', 'Just Chatting')
+            viewer_count = stream_info.get('viewers', 0)
+            avatar_url = stream_info.get('avatar')
+
+            msg_content = random.choice(self.live_messages).format(username=username, platform=platform.capitalize())
+            
+            embed = discord.Embed(description=f"**{title}**", color=discord.Color.purple())
+            embed.set_author(name=f"{username} is LIVE on {platform.capitalize()}!", icon_url=avatar_url or f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
+            
+            embed.add_field(name="Game", value=game_name, inline=True)
+            embed.add_field(name="Viewers", value=str(viewer_count), inline=True)
+            
+            if thumbnail_url:
+                embed.set_image(url=thumbnail_url)
+            
+            embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
+
+            # Button View
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=stream_url))
+            
+            await channel.send(content=f"@everyone {msg_content}", embed=embed, view=view)
+        
+        else: # Going Offline
+            msg_content = random.choice(self.offline_messages).format(username=username)
+            
+            embed = discord.Embed(description=f"Thanks to everyone who tuned in!", color=discord.Color.dark_grey())
+            embed.set_author(name=f"{username} is now Offline", icon_url=f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
+            embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
+
+            await channel.send(content=f"{msg_content}", embed=embed)
+
     @tasks.loop(minutes=5)
     async def streamer_check_loop(self):
         async with self.bot.db.execute("SELECT guild_id, channel_id, platform, username, last_live, is_live FROM streamers") as cursor:
@@ -198,39 +238,19 @@ class Streamers(commands.Cog):
                 channel = self.bot.get_channel(channel_id)
                 if not channel: continue
 
-                stream_url = f"https://www.{platform}.com/{username}"
-                if platform == "kick": stream_url = f"https://kick.com/{username}"
-                elif platform == "youtube": stream_url = f"https://youtube.com/{username}" # Better youtube url
-
                 # Status Change Logic
                 now = datetime.datetime.now().timestamp()
 
                 # Case 1: Went LIVE (Offline -> Live)
                 if is_live_now and not is_live_db:
-                    if title: stream_title = title
-                    if thumb: thumbnail_url = thumb
-                    if game: game_name = game
-                    if viewers: viewer_count = viewers
-                    if avatar: avatar_url = avatar
-
-                    msg_content = random.choice(self.live_messages).format(username=username, platform=platform.capitalize())
-                    
-                    embed = discord.Embed(description=f"**{stream_title}**", color=discord.Color.purple())
-                    embed.set_author(name=f"{username} is LIVE on {platform.capitalize()}!", icon_url=avatar_url or f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
-                    
-                    embed.add_field(name="Game", value=game_name, inline=True)
-                    embed.add_field(name="Viewers", value=str(viewer_count), inline=True)
-                    
-                    if thumbnail_url:
-                        embed.set_image(url=thumbnail_url)
-                    
-                    embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
-
-                    # Button View
-                    view = discord.ui.View()
-                    view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=stream_url))
-                    
-                    await channel.send(content=f"@everyone {msg_content}", embed=embed, view=view)
+                    stream_info = {
+                        'title': title,
+                        'thumbnail': thumb,
+                        'game': game,
+                        'viewers': viewers,
+                        'avatar': avatar
+                    }
+                    await self.send_notification(channel, platform, username, stream_info, True)
                     
                     # Update DB
                     await self.bot.db.execute("UPDATE streamers SET is_live = 1, last_live = ? WHERE guild_id = ? AND platform = ? AND username = ?", 
@@ -239,22 +259,12 @@ class Streamers(commands.Cog):
 
                 # Case 2: Went OFFLINE (Live -> Offline)
                 elif not is_live_now and is_live_db:
-                    msg_content = random.choice(self.offline_messages).format(username=username)
-                    
-                    embed = discord.Embed(description=f"Thanks to everyone who tuned in!", color=discord.Color.dark_grey())
-                    embed.set_author(name=f"{username} is now Offline", icon_url=f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
-                    embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
-
-                    await channel.send(content=f"{msg_content}", embed=embed)
+                    await self.send_notification(channel, platform, username, {}, False)
                     
                     # Update DB
                     await self.bot.db.execute("UPDATE streamers SET is_live = 0 WHERE guild_id = ? AND platform = ? AND username = ?", 
                                               (guild_id, platform, username))
                     await self.bot.db.commit()
-                
-                # Update info if still live (optional, maybe not needed to spam DB updates, but keeps last_live updated?)
-                # Actually, only update last_live on initial go-live to track intervals if needed later.
-                # For now, just state changes are sufficient.
 
     @streamer_check_loop.before_loop
     async def before_streamer_check(self):
@@ -323,6 +333,37 @@ class Streamers(commands.Cog):
             embed.add_field(name=platform.capitalize(), value="\n".join(streamers), inline=False)
 
         await ctx.send(embed=embed)
+
+    @streamer.command(name="test", description="Test streamer notifications (Admin only).")
+    @commands.has_permissions(administrator=True)
+    async def test(self, ctx, platform: str, username: str, action: str = "live"):
+        """
+        Test streamer notifications.
+        Usage: !streamer test <platform> <username> [live/offline]
+        """
+        platform = platform.lower()
+        action = action.lower()
+        
+        if platform not in ["twitch", "youtube", "kick", "tiktok"]:
+            await ctx.send("❌ Invalid platform. Supported: `twitch`, `youtube`, `kick`, `tiktok`.")
+            return
+            
+        if action == "live":
+            stream_info = {
+                'title': "Test Stream Title",
+                'thumbnail': "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/1200px-Python-logo-notext.svg.png", # Placeholder
+                'game': "Testing",
+                'viewers': 1337,
+                'avatar': None
+            }
+            await self.send_notification(ctx.channel, platform, username, stream_info, True)
+            await ctx.send(f"✅ Sent **Go Live** test for {username} on {platform}.", delete_after=5)
+            
+        elif action == "offline":
+            await self.send_notification(ctx.channel, platform, username, {}, False)
+            await ctx.send(f"✅ Sent **Go Offline** test for {username} on {platform}.", delete_after=5)
+        else:
+            await ctx.send("❌ Invalid action. Use `live` or `offline`.")
 
 async def setup(bot):
     await bot.add_cog(Streamers(bot))
