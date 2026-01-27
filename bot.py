@@ -212,6 +212,9 @@ class BOTR(commands.Bot):
                 )
             ''')
             # Streamers Table
+            try: await cursor.execute("ALTER TABLE streamers ADD COLUMN is_live INTEGER DEFAULT 0")
+            except: pass
+
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS streamers (
                     guild_id INTEGER,
@@ -219,6 +222,7 @@ class BOTR(commands.Bot):
                     platform TEXT,
                     username TEXT,
                     last_live REAL,
+                    is_live INTEGER DEFAULT 0,
                     PRIMARY KEY (guild_id, platform, username)
                 )
             ''')

@@ -5,12 +5,34 @@ import os
 import datetime
 import json
 
+import random
+
 class Streamers(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.twitch_token = None
         self.twitch_token_expires = 0
         self.streamer_check_loop.start()
+        
+        self.live_messages = [
+            "{username} just went LIVE! Get in here!",
+            "It's showtime! {username} is live on {platform}!",
+            "Stop what you're doing, {username} is streaming!",
+            "{username} is live! Returns of the King/Queen!",
+            "Popcorn ready? {username} is live!",
+            "Alert! {username} has started streaming!",
+            "Don't miss out! {username} is live now!"
+        ]
+        
+        self.offline_messages = [
+            "{username} has gone offline. Catch you next time!",
+            "Stream over! {username} is offline now.",
+            "That's a wrap for {username}. See ya!",
+            "{username} signed off. Hope you enjoyed the stream!",
+            "Offline now. Check back later for more {username}!",
+            "{username} has ended the stream. GG!",
+            "Show's over folks! {username} is offline."
+        ]
 
     def cog_unload(self):
         self.streamer_check_loop.cancel()
@@ -150,14 +172,14 @@ class Streamers(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def streamer_check_loop(self):
-        async with self.bot.db.execute("SELECT guild_id, channel_id, platform, username, last_live FROM streamers") as cursor:
+        async with self.bot.db.execute("SELECT guild_id, channel_id, platform, username, last_live, is_live FROM streamers") as cursor:
             rows = await cursor.fetchall()
 
         if not rows: return
 
         async with aiohttp.ClientSession() as session:
-            for guild_id, channel_id, platform, username, last_live in rows:
-                is_live = False
+            for guild_id, channel_id, platform, username, last_live, is_live_db in rows:
+                is_live_now = False
                 stream_title = "Live Stream"
                 thumbnail_url = None
                 game_name = "Just Chatting"
@@ -165,51 +187,74 @@ class Streamers(commands.Cog):
                 avatar_url = None
 
                 if platform == 'twitch':
-                    is_live, title, thumb, game, viewers, avatar = await self.check_twitch(session, username)
+                    is_live_now, title, thumb, game, viewers, avatar = await self.check_twitch(session, username)
                 elif platform == 'youtube':
-                    is_live, title, thumb, game, viewers, avatar = await self.check_youtube(session, username)
+                    is_live_now, title, thumb, game, viewers, avatar = await self.check_youtube(session, username)
                 elif platform == 'kick':
-                    is_live, title, thumb, game, viewers, avatar = await self.check_kick(session, username)
+                    is_live_now, title, thumb, game, viewers, avatar = await self.check_kick(session, username)
                 elif platform == 'tiktok':
-                    is_live, title, thumb, game, viewers, avatar = await self.check_tiktok(session, username)
+                    is_live_now, title, thumb, game, viewers, avatar = await self.check_tiktok(session, username)
 
-                if is_live:
+                channel = self.bot.get_channel(channel_id)
+                if not channel: continue
+
+                stream_url = f"https://www.{platform}.com/{username}"
+                if platform == "kick": stream_url = f"https://kick.com/{username}"
+                elif platform == "youtube": stream_url = f"https://youtube.com/{username}" # Better youtube url
+
+                # Status Change Logic
+                now = datetime.datetime.now().timestamp()
+
+                # Case 1: Went LIVE (Offline -> Live)
+                if is_live_now and not is_live_db:
                     if title: stream_title = title
                     if thumb: thumbnail_url = thumb
                     if game: game_name = game
                     if viewers: viewer_count = viewers
                     if avatar: avatar_url = avatar
 
-                    # Logic to send alert only once per stream
-                    now = datetime.datetime.now().timestamp()
+                    msg_content = random.choice(self.live_messages).format(username=username, platform=platform.capitalize())
                     
-                    if (now - last_live) > 3600: # 1 hour cooldown
-                        channel = self.bot.get_channel(channel_id)
-                        if channel:
-                            stream_url = f"https://www.{platform}.com/{username}"
-                            if platform == "kick": stream_url = f"https://kick.com/{username}" # Fix kick url
-                            
-                            embed = discord.Embed(description=f"**{stream_title}**", color=discord.Color.purple())
-                            embed.set_author(name=f"{username} is LIVE on {platform.capitalize()}!", icon_url=avatar_url or f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
-                            
-                            embed.add_field(name="Game", value=game_name, inline=True)
-                            embed.add_field(name="Viewers", value=str(viewer_count), inline=True)
-                            
-                            if thumbnail_url:
-                                embed.set_image(url=thumbnail_url)
-                            
-                            embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
+                    embed = discord.Embed(description=f"**{stream_title}**", color=discord.Color.purple())
+                    embed.set_author(name=f"{username} is LIVE on {platform.capitalize()}!", icon_url=avatar_url or f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
+                    
+                    embed.add_field(name="Game", value=game_name, inline=True)
+                    embed.add_field(name="Viewers", value=str(viewer_count), inline=True)
+                    
+                    if thumbnail_url:
+                        embed.set_image(url=thumbnail_url)
+                    
+                    embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
 
-                            # Button View
-                            view = discord.ui.View()
-                            view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=stream_url))
-                            
-                            await channel.send(content=f"@everyone {username} is live!", embed=embed, view=view)
-                        
-                        # Update last_live
-                        await self.bot.db.execute("UPDATE streamers SET last_live = ? WHERE guild_id = ? AND platform = ? AND username = ?", 
-                                                  (now, guild_id, platform, username))
-                        await self.bot.db.commit()
+                    # Button View
+                    view = discord.ui.View()
+                    view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=stream_url))
+                    
+                    await channel.send(content=f"@everyone {msg_content}", embed=embed, view=view)
+                    
+                    # Update DB
+                    await self.bot.db.execute("UPDATE streamers SET is_live = 1, last_live = ? WHERE guild_id = ? AND platform = ? AND username = ?", 
+                                              (now, guild_id, platform, username))
+                    await self.bot.db.commit()
+
+                # Case 2: Went OFFLINE (Live -> Offline)
+                elif not is_live_now and is_live_db:
+                    msg_content = random.choice(self.offline_messages).format(username=username)
+                    
+                    embed = discord.Embed(description=f"Thanks to everyone who tuned in!", color=discord.Color.dark_grey())
+                    embed.set_author(name=f"{username} is now Offline", icon_url=f"https://cdn.iconscout.com/icon/free/png-256/free-{platform}-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png?f=webp")
+                    embed.set_footer(text=f"{platform.capitalize()} • {datetime.datetime.now().strftime('%I:%M %p')}")
+
+                    await channel.send(content=f"{msg_content}", embed=embed)
+                    
+                    # Update DB
+                    await self.bot.db.execute("UPDATE streamers SET is_live = 0 WHERE guild_id = ? AND platform = ? AND username = ?", 
+                                              (guild_id, platform, username))
+                    await self.bot.db.commit()
+                
+                # Update info if still live (optional, maybe not needed to spam DB updates, but keeps last_live updated?)
+                # Actually, only update last_live on initial go-live to track intervals if needed later.
+                # For now, just state changes are sufficient.
 
     @streamer_check_loop.before_loop
     async def before_streamer_check(self):
