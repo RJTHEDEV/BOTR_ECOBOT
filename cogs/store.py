@@ -150,19 +150,25 @@ class Store(commands.Cog):
         }
         recipe_key = recipe.lower() if recipe else ""
         if recipe_key not in recipes:
-            embed = discord.Embed(title="🛠️ Crafting Recipes", color=discord.Color.orange())
-            embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
-            embed.add_field(name="🖥️ Mining Rig", value="**Cost:** 10x Iron Ore, 5x Wood\n**Effect:** Generates $200 passive income every time you claim `/daily`.", inline=False)
-            embed.add_field(name="🔒 Safe", value="**Cost:** 10x Wood, 5x Magic Dust\n**Effect:** Protects your wallet! 80% chance to block robbers and fine them.", inline=False)
-            embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 2x Silicon Chip, 5x Wood, 10x Copper Wire\n**Effect:** Increases `/crime` success chance by 5% and payout by $100 per laptop.", inline=False)
-            embed.add_field(name="🗄️ Server Rack", value="**Cost:** 20x Silicon Chip, 50x Copper Wire, 10x Iron Ore\n**Effect:** Generates $1,000 passive income every time you claim `/daily`.", inline=False)
-            embed.add_field(name="🤖 Insider Bot", value="**Cost:** 10x Silicon Chip, 5x Gold Bar\n**Effect:** Generates 1 Ticket (🎟️) every time you claim `/daily`.", inline=False)
-            embed.add_field(name="🔓 Lockpick Set", value="**Cost:** 5x Iron Ore, 2x Copper Wire\n**Effect:** Automatically bypasses a victim's Safe when you `/rob` them. (Consumed on use).", inline=False)
-            await ctx.send(embed=embed)
+            await self.send_recipes_embed(ctx)
             return
 
         requirements = recipes[recipe_key]
         
+    @store_group.command(description="View all available crafting recipes.")
+    async def recipes(self, ctx):
+        await self.send_recipes_embed(ctx)
+
+    async def send_recipes_embed(self, ctx):
+        embed = discord.Embed(title="🛠️ Crafting Recipes", color=discord.Color.orange())
+        embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
+        embed.add_field(name="🖥️ Mining Rig", value="**Cost:** 10x Iron Ore, 5x Wood\n**Effect:** Generates $200 passive income every time you claim `/daily`.", inline=False)
+        embed.add_field(name="🔒 Safe", value="**Cost:** 10x Wood, 5x Magic Dust\n**Effect:** Protects your wallet! 80% chance to block robbers and fine them.", inline=False)
+        embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 2x Silicon Chip, 5x Wood, 10x Copper Wire\n**Effect:** Increases `/crime` success chance by 5% and payout by $100 per laptop.", inline=False)
+        embed.add_field(name="🗄️ Server Rack", value="**Cost:** 20x Silicon Chip, 50x Copper Wire, 10x Iron Ore\n**Effect:** Generates $1,000 passive income every time you claim `/daily`.", inline=False)
+        embed.add_field(name="🤖 Insider Bot", value="**Cost:** 10x Silicon Chip, 5x Gold Bar\n**Effect:** Generates 1 Ticket (🎟️) every time you claim `/daily`.", inline=False)
+        embed.add_field(name="🔓 Lockpick Set", value="**Cost:** 5x Iron Ore, 2x Copper Wire\n**Effect:** Automatically bypasses a victim's Safe when you `/rob` them. (Consumed on use).", inline=False)
+        await ctx.send(embed=embed)
         # Check inventory for requirements
         async with self.bot.db.execute("SELECT item_name, quantity FROM inventory WHERE user_id = ?", (ctx.author.id,)) as cursor:
             inv = await cursor.fetchall()
