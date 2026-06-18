@@ -123,15 +123,24 @@ class Notifications(commands.Cog):
                         # Post to discord
                         channel = self.bot.get_channel(discord_channel_id)
                         if channel:
-                            embed = discord.Embed(title=title, url=link, color=discord.Color.red())
-                            embed.set_author(name=author_name, icon_url="https://upload.wikimedia.org/wikipedia/commons/e/ef/Youtube_logo_2015.jpg")
+                            embed = discord.Embed(
+                                title=title, 
+                                url=link, 
+                                color=0xFF0000,
+                                timestamp=discord.utils.utcnow()
+                            )
+                            embed.set_author(name=author_name, icon_url="https://upload.wikimedia.org/wikipedia/commons/e/ef/Youtube_logo_2015.jpg", url=f"https://www.youtube.com/channel/{yt_channel_id}")
+                            
                             if thumbnail_url:
                                 embed.set_image(url=thumbnail_url)
                                 
+                            embed.set_footer(text="YouTube", icon_url="https://upload.wikimedia.org/wikipedia/commons/e/ef/Youtube_logo_2015.jpg")
+                                
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Video", style=discord.ButtonStyle.link, url=link))
+                            view.add_item(discord.ui.Button(label="Channel", style=discord.ButtonStyle.link, url=f"https://www.youtube.com/channel/{yt_channel_id}"))
                             
-                            content = f"{custom_message}\n**{author_name}** just posted a new video!"
+                            content = f"{custom_message}\n🎉 **{author_name}** just posted a new video!"
                             await channel.send(content=content, embed=embed, view=view)
                             
         except Exception as e:
@@ -222,20 +231,39 @@ class Notifications(commands.Cog):
                         await self.bot.db.execute("UPDATE twitch_alerts SET is_live = 1 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
                         
+                        # Fetch user profile image
+                        profile_image_url = "https://pngimg.com/uploads/twitch/twitch_PNG27.png"
+                        async with session.get(f"https://api.twitch.tv/helix/users?login={twitch_username}", headers=headers) as u_resp:
+                            if u_resp.status == 200:
+                                u_data = await u_resp.json()
+                                if u_data.get("data"):
+                                    profile_image_url = u_data["data"][0].get("profile_image_url", profile_image_url)
+
                         channel = self.bot.get_channel(discord_channel_id)
                         if channel:
                             url = f"https://twitch.tv/{twitch_username}"
-                            embed = discord.Embed(title=title, url=url, color=discord.Color.purple())
-                            embed.set_author(name=f"{twitch_username} is LIVE on Twitch!", icon_url="https://pngimg.com/uploads/twitch/twitch_PNG27.png")
-                            embed.add_field(name="Playing", value=game, inline=True)
-                            embed.add_field(name="Viewers", value=str(viewer_count), inline=True)
+                            embed = discord.Embed(
+                                title=title, 
+                                url=url, 
+                                color=0x9146FF, # Twitch Purple
+                                timestamp=discord.utils.utcnow()
+                            )
+                            embed.set_author(name=f"{twitch_username} is LIVE on Twitch!", icon_url="https://pngimg.com/uploads/twitch/twitch_PNG27.png", url=url)
+                            embed.set_thumbnail(url=profile_image_url)
+                            embed.add_field(name="🎮 Playing", value=f"**{game}**", inline=True)
+                            embed.add_field(name="👥 Viewers", value=f"**{viewer_count}**", inline=True)
+                            
                             if thumbnail_url:
-                                embed.set_image(url=thumbnail_url)
+                                # Append a random query string so Discord doesn't cache the thumbnail
+                                import random
+                                embed.set_image(url=f"{thumbnail_url}?r={random.randint(1,10000)}")
+                                
+                            embed.set_footer(text="Twitch", icon_url="https://pngimg.com/uploads/twitch/twitch_PNG27.png")
                                 
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
-                            content = f"{custom_message}\n**{twitch_username}** just went live playing **{game}**!"
+                            content = f"{custom_message}\n🔴 **{twitch_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
