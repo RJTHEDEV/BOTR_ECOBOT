@@ -10,6 +10,10 @@ class Moderation(commands.Cog):
         self.bot = bot
         self.sniped_messages = {}
 
+    @commands.hybrid_group(name="mod", invoke_without_command=True)
+    async def mod(self, ctx):
+        await ctx.send("Use `/mod <action>`")
+
     async def log_mod_action(self, guild, embed):
         """Helper to log mod actions using the Logging cog if available."""
         logging_cog = self.bot.get_cog("Logging")
@@ -23,7 +27,7 @@ class Moderation(commands.Cog):
         await self.bot.db.commit()
 
     # --- Commands ---
-    @commands.hybrid_command(description="Kick a user.")
+    @mod.command(description="Kick a user.")
     @commands.has_permissions(kick_members=True)
     async def kick(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         if member.top_role >= ctx.author.top_role:
@@ -39,7 +43,7 @@ class Moderation(commands.Cog):
         await ctx.send(embed=embed)
         await self.log_mod_action(ctx.guild, embed)
 
-    @commands.hybrid_command(description="Ban a user.")
+    @mod.command(description="Ban a user.")
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         if member.top_role >= ctx.author.top_role:
@@ -87,13 +91,13 @@ class Moderation(commands.Cog):
         await ctx.send(embed=embed)
         await self.log_mod_action(ctx.guild, embed)
 
-    @commands.hybrid_command(description="Remove timeout from a user.")
+    @mod.command(description="Remove timeout from a user.")
     @commands.has_permissions(moderate_members=True)
     async def unmute(self, ctx, member: discord.Member):
         await member.timeout(None)
         await ctx.send(f"🔊 {member.mention} has been unmuted.")
 
-    @commands.hybrid_command(description="Warn a user.")
+    @mod.command(description="Warn a user.")
     @commands.has_permissions(manage_messages=True)
     async def warn(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         await self.add_infraction(ctx.guild.id, member.id, ctx.author.id, "Warn", reason)
@@ -124,7 +128,7 @@ class Moderation(commands.Cog):
             except Exception as e:
                 await ctx.send(f"⚠️ Failed to apply automated mute: {e}")
 
-    @commands.hybrid_command(description="Clear multiple messages.")
+    @mod.command(description="Clear multiple messages.")
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx, amount: int):
         if amount <= 0 or amount > 1000:
@@ -141,7 +145,7 @@ class Moderation(commands.Cog):
             await msg.delete(delay=5)
         await self.log_mod_action(ctx.guild, embed)
 
-    @commands.hybrid_command(description="Set channel slowmode.")
+    @mod.command(description="Set channel slowmode.")
     @commands.has_permissions(manage_channels=True)
     async def slowmode(self, ctx, seconds: int):
         await ctx.channel.edit(slowmode_delay=seconds)
@@ -166,7 +170,7 @@ class Moderation(commands.Cog):
         await ctx.send(embed=embed)
         await self.log_mod_action(ctx.guild, embed)
 
-    @commands.hybrid_command(description="Unban a user by ID.")
+    @mod.command(description="Unban a user by ID.")
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx, user_id: str, *, reason: str = "No reason provided"):
         try:
@@ -180,7 +184,7 @@ class Moderation(commands.Cog):
         except ValueError:
             await ctx.send("Invalid user ID.")
 
-    @commands.hybrid_command(description="Change a user's nickname.")
+    @mod.command(description="Change a user's nickname.")
     @commands.has_permissions(manage_nicknames=True)
     async def nick(self, ctx, member: discord.Member, *, nickname: str = None):
         if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
@@ -193,13 +197,13 @@ class Moderation(commands.Cog):
         await ctx.send(embed=embed)
         await self.log_mod_action(ctx.guild, embed)
 
-    @commands.hybrid_command(description="Lockdown the current channel.")
+    @mod.command(description="Lockdown the current channel.")
     @commands.has_permissions(manage_channels=True)
     async def lockdown(self, ctx):
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
         await ctx.send("🔒 **Channel Locked.**")
 
-    @commands.hybrid_command(description="Unlock the current channel.")
+    @mod.command(description="Unlock the current channel.")
     @commands.has_permissions(manage_channels=True)
     async def unlock(self, ctx):
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None)
@@ -228,7 +232,7 @@ class Moderation(commands.Cog):
             'time': message.created_at
         }
 
-    @commands.hybrid_command(description="View user infraction history.")
+    @mod.command(description="View user infraction history.")
     @commands.has_permissions(manage_messages=True)
     async def history(self, ctx, member: discord.Member):
         async with self.bot.db.execute("SELECT type, reason, mod_id, timestamp FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT 10", (ctx.guild.id, member.id)) as cursor:

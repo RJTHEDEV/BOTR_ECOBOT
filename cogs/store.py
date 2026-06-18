@@ -5,7 +5,12 @@ class Store(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.hybrid_command(description="View items in the shop.")
+    @commands.hybrid_group(name="store", invoke_without_command=True)
+    async def store_group(self, ctx):
+        await ctx.send("Use `/store <action>`")
+
+
+    @store_group.command(description="View items in the shop.")
     async def shop(self, ctx):
         # Get distinct categories
         async with self.bot.db.execute("SELECT DISTINCT category FROM store") as cursor:
@@ -19,7 +24,7 @@ class Store(commands.Cog):
         embed = discord.Embed(title="🛒 Community Shop", description="Select a category below to browse items.", color=discord.Color.gold())
         await ctx.send(embed=embed, view=view)
 
-    @commands.hybrid_command(description="Buy an item from the shop.")
+    @store_group.command(description="Buy an item from the shop.")
     async def buy(self, ctx, *, item_name: str):
         # Check if item exists
         async with self.bot.db.execute("SELECT price, currency FROM store WHERE name = ?", (item_name,)) as cursor:
@@ -64,7 +69,7 @@ class Store(commands.Cog):
         cost_str = f"${price}" if currency == "coins" else f"🎟️ {price}"
         await ctx.send(f"You bought {item_name} for {cost_str}!")
 
-    @commands.hybrid_command(description="View your inventory.")
+    @store_group.command(description="View your inventory.")
     async def inventory(self, ctx):
         async with self.bot.db.execute("SELECT item_name, quantity FROM inventory WHERE user_id = ?", (ctx.author.id,)) as cursor:
             items = await cursor.fetchall()
@@ -78,7 +83,7 @@ class Store(commands.Cog):
             embed.add_field(name=name, value=f"Quantity: {quantity}", inline=True)
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(description="Admin: Add an item to the shop.")
+    @store_group.command(description="Admin: Add an item to the shop.")
     @commands.has_permissions(administrator=True)
     async def additem(self, ctx, name: str, price: int, description: str, currency: str = "coins", category: str = "Items"):
         if currency not in ["coins", "tickets"]:

@@ -11,10 +11,10 @@ class TradingAlerts(commands.Cog):
         self.check_alerts.cancel()
 
     @commands.hybrid_group(invoke_without_command=True, description="Manage stock price alerts.")
-    async def alert(self, ctx):
-        await ctx.send("Use `/alert set <ticker> <price> <above/below>` or `/alert list`.")
+    async def trade_alert(self, ctx):
+        await ctx.send("Use `/trade_alert set <ticker> <price> <above/below>` or `/trade_alert list`.")
 
-    @alert.command(name="set", description="Set a price alert for a stock.")
+    @trade_alert.command(name="set", description="Set a price alert for a stock.")
     async def set_alert(self, ctx, ticker: str, price: float, direction: str):
         ticker = ticker.upper()
         direction = direction.lower()
@@ -35,7 +35,7 @@ class TradingAlerts(commands.Cog):
         await self.bot.db.commit()
         await ctx.send(f"✅ Alert set! I will DM you when **{ticker}** goes **{direction}** **${price:,.2f}**. (Current: ${current_price:,.2f})")
 
-    @alert.command(name="list", description="List your active price alerts.")
+    @trade_alert.command(name="list", description="List your active price alerts.")
     async def list_alerts(self, ctx):
         async with self.bot.db.execute("SELECT id, ticker, target_price, direction FROM price_alerts WHERE user_id = ?", (ctx.author.id,)) as cursor:
             rows = await cursor.fetchall()
@@ -99,6 +99,16 @@ class TradingAlerts(commands.Cog):
     @check_alerts.before_loop
     async def before_check(self):
         await self.bot.wait_until_ready()
+        await self.bot.db.execute('''
+            CREATE TABLE IF NOT EXISTS price_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                ticker TEXT,
+                target_price REAL,
+                direction TEXT
+            )
+        ''')
+        await self.bot.db.commit()
 
 async def setup(bot):
     await bot.add_cog(TradingAlerts(bot))

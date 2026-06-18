@@ -8,15 +8,20 @@ class Community(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.hybrid_group(name="community", invoke_without_command=True)
+    async def community_group(self, ctx):
+        await ctx.send("Use `/community <action>`")
+
+
     # --- News ---
-    @commands.hybrid_command(description="Admin: Post a news update.")
+    @community_group.command(description="Admin: Post a news update.")
     @commands.has_permissions(administrator=True)
     async def news(self, ctx, title: str, *, content: str):
         embed = discord.Embed(title=f"📰 {title}", description=content, color=discord.Color.blue())
         embed.set_footer(text=f"Posted by {ctx.author.display_name}")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(description="Get info on how to claim the Active Developer Badge.")
+    @community_group.command(description="Get info on how to claim the Active Developer Badge.")
     async def badge(self, ctx):
         await ctx.send("✅ **Command Executed!**\n\nTo claim your **Active Developer Badge**:\n1. Wait up to 24 hours for Discord to update.\n2. Go to: https://discord.com/developers/active-developer\n3. Select this bot and claim your badge!\n\n*(Running any slash command qualifies you, but this one confirms it works!)*")
 
@@ -47,7 +52,7 @@ class Community(commands.Cog):
         await ctx.send(f"Added event: {name} at {time}")
 
     # --- Giveaways ---
-    @commands.hybrid_command(description="Admin: Start a giveaway.")
+    @community_group.command(description="Admin: Start a giveaway.")
     @commands.has_permissions(administrator=True)
     async def gstart(self, ctx, duration: str, winners: int, *, prize: str):
         # Simple duration parser (e.g., 10s, 1m, 1h)
@@ -111,12 +116,12 @@ class Community(commands.Cog):
         await self.bot.db.execute("UPDATE giveaways SET ended = 1 WHERE message_id = ?", (message_id,))
         await self.bot.db.commit()
 
-    @commands.hybrid_command(description="Admin: End a giveaway early.")
+    @community_group.command(description="Admin: End a giveaway early.")
     @commands.has_permissions(administrator=True)
     async def gend(self, ctx, message_id: int):
         await self.end_giveaway(message_id)
 
-    @commands.hybrid_command(description="Admin: Reroll a giveaway winner.")
+    @community_group.command(description="Admin: Reroll a giveaway winner.")
     @commands.has_permissions(administrator=True)
     async def greroll(self, ctx, message_id: int):
         # Simplified reroll logic (just picks one new winner)
@@ -445,7 +450,7 @@ class Community(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(description="Create a button-based reaction role menu.")
+    @community_group.command(description="Create a button-based reaction role menu.")
     @commands.has_permissions(administrator=True)
     async def buttonroles(self, ctx, title: str, description: str, role1: discord.Role, role2: discord.Role = None, role3: discord.Role = None, role4: discord.Role = None, role5: discord.Role = None):
         view = discord.ui.View(timeout=None)

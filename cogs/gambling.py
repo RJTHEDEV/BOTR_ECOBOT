@@ -7,6 +7,11 @@ class Gambling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.hybrid_group(name="casino", invoke_without_command=True)
+    async def casino_group(self, ctx):
+        await ctx.send("Use `/casino <action>`")
+
+
     async def get_balance(self, user_id):
         async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
@@ -19,7 +24,7 @@ class Gambling(commands.Cog):
         await self.bot.db.commit()
         await self.bot.get_cog("Economy").log_transaction(user_id, "gambling", amount, description)
 
-    @commands.hybrid_command(description="Flip a coin to double your bet.")
+    @casino_group.command(description="Flip a coin to double your bet.")
     async def coinflip(self, ctx, amount: int, choice: str):
         if amount <= 0:
             await ctx.send("Amount must be positive.")
@@ -49,7 +54,7 @@ class Gambling(commands.Cog):
             await self.update_balance(ctx.author.id, loss)
             await ctx.send(f"🪙 It's **{result.title()}**! You lost **${amount}**.")
 
-    @commands.hybrid_command(description="Spin the slots.")
+    @casino_group.command(description="Spin the slots.")
     async def slots(self, ctx, amount: int):
         if amount <= 0:
             await ctx.send("Amount must be positive.")
@@ -85,7 +90,7 @@ class Gambling(commands.Cog):
         
         await msg.edit(content=f"🎰 Result:\n{a} | {b} | {c}\n\n{result_text}")
 
-    @commands.hybrid_command(description="Play Blackjack.")
+    @casino_group.command(description="Play Blackjack.")
     async def blackjack(self, ctx, amount: int):
         if amount <= 0:
             await ctx.send("Amount must be positive.")
@@ -217,7 +222,7 @@ class Gambling(commands.Cog):
         else:
             await ctx.send(f"The number was **{next_num}**. You lost **${amount}**.")
 
-    @commands.hybrid_command(description="Roll two dice. Pairs win!")
+    @casino_group.command(description="Roll two dice. Pairs win!")
     async def snakeeyes(self, ctx, amount: int):
         if amount <= 0: return await ctx.send("Amount must be positive.")
         

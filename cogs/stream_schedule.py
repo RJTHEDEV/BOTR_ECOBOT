@@ -7,10 +7,10 @@ class StreamSchedule(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_group(invoke_without_command=True, description="Manage your stream schedule.")
-    async def schedule(self, ctx):
-        await ctx.send("Use `/schedule next <timestamp>` to set a countdown.")
+    async def stream_schedule(self, ctx):
+        await ctx.send("Use `/stream_schedule next <timestamp>` to set a countdown.")
 
-    @schedule.command(name="next", description="Set a countdown to your next stream. Use Unix Timestamp.")
+    @stream_schedule.command(name="next", description="Set a countdown to your next stream. Use Unix Timestamp.")
     @commands.has_permissions(manage_messages=True)
     async def next_stream(self, ctx, unix_timestamp: int, *, title: str = "Next Stream"):
         """

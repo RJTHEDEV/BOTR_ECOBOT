@@ -49,7 +49,12 @@ class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.hybrid_command(description="Join the voice channel.")
+    @commands.hybrid_group(name="music", invoke_without_command=True)
+    async def music_group(self, ctx):
+        await ctx.send("Use `/music <action>`")
+
+
+    @music_group.command(description="Join the voice channel.")
     async def join(self, ctx):
         if not ctx.message.author.voice:
             await ctx.send("You are not connected to a voice channel.")
@@ -63,7 +68,7 @@ class Music(commands.Cog):
         await channel.connect()
         await ctx.send(f"Joined {channel.name}")
 
-    @commands.hybrid_command(description="Play audio from a YouTube URL or search query.")
+    @music_group.command(description="Play audio from a YouTube URL or search query.")
     async def play(self, ctx, *, query: str):
         if not ctx.voice_client:
             await ctx.invoke(self.join)
@@ -76,7 +81,7 @@ class Music(commands.Cog):
             except Exception as e:
                 await ctx.send(f"An error occurred: {e}")
 
-    @commands.hybrid_command(description="Stop the music and leave the voice channel.")
+    @music_group.command(description="Stop the music and leave the voice channel.")
     async def stop(self, ctx):
         if ctx.voice_client:
             await ctx.voice_client.disconnect()
@@ -84,13 +89,13 @@ class Music(commands.Cog):
         else:
             await ctx.send("I'm not in a voice channel.")
 
-    @commands.hybrid_command(description="Pause the currently playing audio.")
+    @music_group.command(description="Pause the currently playing audio.")
     async def pause(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.pause()
             await ctx.send("⏸️ Paused the audio.")
             
-    @commands.hybrid_command(description="Resume the currently paused audio.")
+    @music_group.command(description="Resume the currently paused audio.")
     async def resume(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_paused():
             ctx.voice_client.resume()
