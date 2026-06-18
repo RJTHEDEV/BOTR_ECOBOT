@@ -617,6 +617,14 @@ class BOTR(commands.Bot):
                     bot_admin_role_id INTEGER
                 )
             ''')
+            # Casino Jackpot Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS casino_jackpot (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    amount INTEGER DEFAULT 10000
+                )
+            ''')
+            await cursor.execute("INSERT OR IGNORE INTO casino_jackpot (id, amount) VALUES (1, 10000)")
         await self.db.commit()
 
     async def close(self):

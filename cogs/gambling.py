@@ -3,14 +3,247 @@ from discord.ext import commands
 import random
 import asyncio
 
+class BlackjackView(discord.ui.View):
+    def __init__(self, cog, user, bet, deck, player_hand, dealer_hand, msg):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+        self.bet = bet
+        self.deck = deck
+        self.player_hand = player_hand
+        self.dealer_hand = dealer_hand
+        self.msg = msg
+
+    def calculate_score(self, hand):
+        score = sum(hand)
+        aces = hand.count(11)
+        while score > 21 and aces:
+            score -= 10
+            aces -= 1
+        return score
+
+    def create_embed(self, player_score, dealer_score=None, hide_dealer=True):
+        embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.dark_red())
+        embed.add_field(name="Your Hand", value=f"{self.player_hand} (Score: {player_score})", inline=False)
+        if hide_dealer:
+            embed.add_field(name="Dealer's Hand", value=f"[{self.dealer_hand[0]}, ?]", inline=False)
+        else:
+            embed.add_field(name="Dealer's Hand", value=f"{self.dealer_hand} (Score: {dealer_score})", inline=False)
+        return embed
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    async def disable_buttons(self, interaction):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="Hit", style=discord.ButtonStyle.success)
+    async def btn_hit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.player_hand.append(self.deck.pop())
+        score = self.calculate_score(self.player_hand)
+        
+        if score > 21:
+            await self.disable_buttons(interaction)
+            await self.cog.add_to_jackpot(self.bet)
+            embed = self.create_embed(score, self.calculate_score(self.dealer_hand), False)
+            embed.description = f"💥 **Bust!** You went over 21. You lost **${self.bet}**."
+            await self.msg.edit(embed=embed, view=None)
+        else:
+            embed = self.create_embed(score)
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Stand", style=discord.ButtonStyle.danger)
+    async def btn_stand(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.disable_buttons(interaction)
+        
+        dealer_score = self.calculate_score(self.dealer_hand)
+        while dealer_score < 17:
+            self.dealer_hand.append(self.deck.pop())
+            dealer_score = self.calculate_score(self.dealer_hand)
+
+        player_score = self.calculate_score(self.player_hand)
+        embed = self.create_embed(player_score, dealer_score, False)
+
+        if dealer_score > 21:
+            winnings = self.bet * 2
+            await self.cog.update_balance(self.user.id, winnings, "Blackjack Win")
+            embed.description = f"🎉 **Dealer Busts!** You won **${winnings}**!"
+        elif player_score > dealer_score:
+            winnings = self.bet * 2
+            await self.cog.update_balance(self.user.id, winnings, "Blackjack Win")
+            embed.description = f"🎉 **You Win!** You beat the dealer and won **${winnings}**!"
+        elif player_score == dealer_score:
+            await self.cog.update_balance(self.user.id, self.bet, "Blackjack Push")
+            embed.description = "🤝 **Push!** It's a tie. Your bet is returned."
+        else:
+            await self.cog.add_to_jackpot(self.bet)
+            embed.description = f"📉 **Dealer Wins.** You lost **${self.bet}**."
+
+        await self.msg.edit(embed=embed, view=None)
+
+class HighLowView(discord.ui.View):
+    def __init__(self, cog, user, bet, current, msg):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+        self.bet = bet
+        self.current = current
+        self.msg = msg
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    async def process_guess(self, interaction, guess_higher):
+        for item in self.children: item.disabled = True
+        await interaction.response.edit_message(view=self)
+        
+        next_num = random.randint(1, 100)
+        
+        win = False
+        if guess_higher and next_num > self.current: win = True
+        elif not guess_higher and next_num < self.current: win = True
+            
+        embed = discord.Embed(title="📈 High / Low 📉", color=discord.Color.blue())
+        if next_num == self.current:
+            await self.cog.update_balance(self.user.id, self.bet, "HighLow Push")
+            embed.description = f"The new number is **{next_num}**. It's a tie! Bet returned."
+        elif win:
+            winnings = int(self.bet * 1.8)
+            await self.cog.update_balance(self.user.id, winnings, "HighLow Win")
+            embed.description = f"The new number is **{next_num}**. You guessed correctly and won **${winnings}**!"
+            embed.color = discord.Color.green()
+        else:
+            await self.cog.add_to_jackpot(self.bet)
+            embed.description = f"The new number is **{next_num}**. You guessed wrong and lost **${self.bet}**."
+            embed.color = discord.Color.red()
+            
+        await self.msg.edit(embed=embed, view=None)
+
+    @discord.ui.button(label="Higher", style=discord.ButtonStyle.success, emoji="⬆️")
+    async def btn_higher(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_guess(interaction, True)
+
+    @discord.ui.button(label="Lower", style=discord.ButtonStyle.danger, emoji="⬇️")
+    async def btn_lower(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_guess(interaction, False)
+
+class CoinFlipView(discord.ui.View):
+    def __init__(self, cog, user, bet, msg):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+        self.bet = bet
+        self.msg = msg
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    async def process_flip(self, interaction, choice):
+        for item in self.children: item.disabled = True
+        
+        # Spin animation
+        anim_embed = discord.Embed(title="🪙 Coin Flip", description="Flipping the coin...", color=discord.Color.gold())
+        await interaction.response.edit_message(embed=anim_embed, view=self)
+        await asyncio.sleep(1.5)
+        
+        result = random.choice(["heads", "tails"])
+        
+        embed = discord.Embed(title="🪙 Coin Flip", color=discord.Color.gold())
+        if choice == result:
+            winnings = self.bet * 2
+            await self.cog.update_balance(self.user.id, winnings, "Coinflip Win")
+            embed.description = f"It landed on **{result.title()}**! You won **${winnings}**!"
+            embed.color = discord.Color.green()
+        else:
+            await self.cog.add_to_jackpot(self.bet)
+            embed.description = f"It landed on **{result.title()}**... You lost **${self.bet}**."
+            embed.color = discord.Color.red()
+            
+        await self.msg.edit(embed=embed, view=None)
+
+    @discord.ui.button(label="Heads", style=discord.ButtonStyle.primary)
+    async def btn_heads(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_flip(interaction, "heads")
+
+    @discord.ui.button(label="Tails", style=discord.ButtonStyle.primary)
+    async def btn_tails(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_flip(interaction, "tails")
+
+
+class CasinoBetModal(discord.ui.Modal):
+    def __init__(self, cog, game_choice):
+        super().__init__(title=f"Bet Amount for {game_choice.title()}")
+        self.cog = cog
+        self.game_choice = game_choice
+        
+        self.bet_input = discord.ui.TextInput(
+            label="How much do you want to bet?",
+            placeholder="e.g. 100, 500, 1000",
+            required=True
+        )
+        self.add_item(self.bet_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            bet = int(self.bet_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number.", ephemeral=True)
+            return
+
+        if bet <= 0:
+            await interaction.response.send_message("❌ Amount must be greater than zero.", ephemeral=True)
+            return
+
+        balance = await self.cog.get_balance(interaction.user.id)
+        if balance < bet:
+            await interaction.response.send_message("❌ Insufficient funds for this bet.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        
+        # Deduct bet for games
+        await self.cog.update_balance(interaction.user.id, -bet, f"Casino Bet ({self.game_choice})")
+        
+        if self.game_choice == "blackjack":
+            await self.cog.start_blackjack(interaction.channel, interaction.user, bet)
+        elif self.game_choice == "slots":
+            await self.cog.start_slots(interaction.channel, interaction.user, bet)
+        elif self.game_choice == "highlow":
+            await self.cog.start_highlow(interaction.channel, interaction.user, bet)
+        elif self.game_choice == "coinflip":
+            await self.cog.start_coinflip(interaction.channel, interaction.user, bet)
+        elif self.game_choice == "snakeeyes":
+            await self.cog.start_snakeeyes(interaction.channel, interaction.user, bet)
+
+
+class CasinoLobbySelect(discord.ui.Select):
+    def __init__(self, cog):
+        self.cog = cog
+        options = [
+            discord.SelectOption(label="Slots", description="Spin to win big multipliers! (Jackpot eligible)", emoji="🎰", value="slots"),
+            discord.SelectOption(label="Blackjack", description="Beat the dealer to 21.", emoji="🃏", value="blackjack"),
+            discord.SelectOption(label="High / Low", description="Guess if the next number is higher or lower.", emoji="📈", value="highlow"),
+            discord.SelectOption(label="Coin Flip", description="50/50 chance to double your bet.", emoji="🪙", value="coinflip"),
+            discord.SelectOption(label="Snake Eyes", description="Roll two dice. Pairs win! (Jackpot eligible)", emoji="🎲", value="snakeeyes")
+        ]
+        super().__init__(placeholder="Select a game to play...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        game = self.values[0]
+        modal = CasinoBetModal(self.cog, game)
+        await interaction.response.send_modal(modal)
+
+class CasinoLobbyView(discord.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.add_item(CasinoLobbySelect(cog))
+
+
 class Gambling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    @commands.hybrid_group(name="casino", invoke_without_command=True)
-    async def casino_group(self, ctx):
-        await ctx.send("Use `/casino <action>`")
-
 
     async def get_balance(self, user_id):
         async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -22,236 +255,144 @@ class Gambling(commands.Cog):
             if cursor.rowcount == 0:
                 await self.bot.db.execute("INSERT INTO users (user_id, balance) VALUES (?, ?)", (user_id, amount))
         await self.bot.db.commit()
-        await self.bot.get_cog("Economy").log_transaction(user_id, "gambling", amount, description)
+        if amount != 0:
+            await self.bot.get_cog("Economy").log_transaction(user_id, "gambling", amount, description)
 
-    @casino_group.command(description="Flip a coin to double your bet.")
-    async def coinflip(self, ctx, amount: int, choice: str):
-        if amount <= 0:
-            await ctx.send("Amount must be positive.")
-            return
+    async def add_to_jackpot(self, bet_amount):
+        # 5% of losses go to the global jackpot
+        contribution = int(bet_amount * 0.05)
+        if contribution > 0:
+            await self.bot.db.execute("UPDATE casino_jackpot SET amount = amount + ? WHERE id = 1", (contribution,))
+            await self.bot.db.commit()
 
-        balance = await self.get_balance(ctx.author.id)
-        if balance < amount:
-            await ctx.send("Insufficient funds.")
-            return
+    @commands.hybrid_group(name="casino", invoke_without_command=True, description="Open the Casino Lobby.")
+    async def casino_group(self, ctx):
+        await self.lobby(ctx)
 
-        choice = choice.lower()
-        if choice not in ["heads", "tails", "h", "t"]:
-            await ctx.send("Choose heads or tails.")
-            return
-        
-        # Normalize choice
-        choice = "heads" if choice.startswith("h") else "tails"
-        
-        result = random.choice(["heads", "tails"])
-        
-        if choice == result:
-            winnings = amount
-            await self.update_balance(ctx.author.id, winnings)
-            await ctx.send(f"🪙 It's **{result.title()}**! You won **${winnings}**!")
-        else:
-            loss = -amount
-            await self.update_balance(ctx.author.id, loss)
-            await ctx.send(f"🪙 It's **{result.title()}**! You lost **${amount}**.")
+    @casino_group.command(description="Open the main Casino Lobby.")
+    async def lobby(self, ctx):
+        async with self.bot.db.execute("SELECT amount FROM casino_jackpot WHERE id = 1") as cursor:
+            row = await cursor.fetchone()
+            jackpot = row[0] if row else 10000
 
-    @casino_group.command(description="Spin the slots.")
-    async def slots(self, ctx, amount: int):
-        if amount <= 0:
-            await ctx.send("Amount must be positive.")
-            return
+        embed = discord.Embed(title="🎰 Welcome to the Casino Lobby", description="Select a game from the dropdown below to place your bets!", color=discord.Color.gold())
+        embed.add_field(name="💰 Mega Jackpot", value=f"**${jackpot:,}**", inline=False)
+        embed.set_footer(text="Play Slots or Snake Eyes to win the Mega Jackpot!")
+        await ctx.send(embed=embed, view=CasinoLobbyView(self))
 
-        balance = await self.get_balance(ctx.author.id)
-        if balance < amount:
-            await ctx.send("Insufficient funds.")
-            return
-
-        # Deduct bet first
-        await self.update_balance(ctx.author.id, -amount)
-
+    async def start_slots(self, channel, user, bet):
         emojis = ["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣"]
-        a = random.choice(emojis)
-        b = random.choice(emojis)
-        c = random.choice(emojis)
-
-        msg = await ctx.send(f"🎰 Spinning...\n{a} | {b} | {c}")
+        embed = discord.Embed(title="🎰 Slots", description="Spinning...\n\n❓ | ❓ | ❓", color=discord.Color.gold())
+        msg = await channel.send(embed=embed)
         
-        payout = 0
-        if a == b == c:
-            payout = amount * 5
-            result_text = f"JACKPOT! You won **${payout}**!"
+        # Animation
+        for i in range(3):
+            await asyncio.sleep(0.5)
+            e1, e2, e3 = random.choice(emojis), random.choice(emojis), random.choice(emojis)
+            embed.description = f"Spinning...\n\n{e1} | {e2} | {e3}"
+            await msg.edit(embed=embed)
+
+        a, b, c = random.choice(emojis), random.choice(emojis), random.choice(emojis)
+        
+        if a == b == c == "7️⃣":
+            # MEGA JACKPOT
+            async with self.bot.db.execute("SELECT amount FROM casino_jackpot WHERE id = 1") as cursor:
+                jp = await cursor.fetchone()[0]
+            await self.update_balance(user.id, jp, "Mega Jackpot Win")
+            await self.bot.db.execute("UPDATE casino_jackpot SET amount = 10000 WHERE id = 1")
+            await self.bot.db.commit()
+            embed.description = f"**{a} | {b} | {c}**\n\n🚨 **MEGA JACKPOT!!!** 🚨\nYou won the entire pool of **${jp:,}**!"
+            embed.color = discord.Color.green()
+        elif a == b == c:
+            payout = bet * 10
+            await self.update_balance(user.id, payout, "Slots Jackpot")
+            embed.description = f"**{a} | {b} | {c}**\n\n🎉 **JACKPOT!** You won **${payout}** (10x)!"
+            embed.color = discord.Color.green()
         elif a == b or b == c or a == c:
-            payout = amount * 2
-            result_text = f"Nice! Two of a kind. You won **${payout}**!"
+            payout = bet * 2
+            await self.update_balance(user.id, payout, "Slots Win")
+            embed.description = f"**{a} | {b} | {c}**\n\nNice! Two of a kind. You won **${payout}**!"
+            embed.color = discord.Color.green()
         else:
-            result_text = "Better luck next time!"
+            await self.add_to_jackpot(bet)
+            embed.description = f"**{a} | {b} | {c}**\n\nBetter luck next time. You lost **${bet}**."
+            embed.color = discord.Color.red()
+            
+        await msg.edit(embed=embed)
 
-        if payout > 0:
-            await self.update_balance(ctx.author.id, payout)
-        
-        await msg.edit(content=f"🎰 Result:\n{a} | {b} | {c}\n\n{result_text}")
-
-    @casino_group.command(description="Play Blackjack.")
-    async def blackjack(self, ctx, amount: int):
-        if amount <= 0:
-            await ctx.send("Amount must be positive.")
-            return
-
-        balance = await self.get_balance(ctx.author.id)
-        if balance < amount:
-            await ctx.send("Insufficient funds.")
-            return
-
-        # Deduct bet
-        await self.update_balance(ctx.author.id, -amount)
-
+    async def start_blackjack(self, channel, user, bet):
         deck = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11] * 4
         random.shuffle(deck)
 
         player_hand = [deck.pop(), deck.pop()]
         dealer_hand = [deck.pop(), deck.pop()]
 
-        def calculate_score(hand):
-            score = sum(hand)
-            aces = hand.count(11)
-            while score > 21 and aces:
-                score -= 10
-                aces -= 1
-            return score
-
+        def calc_score(hand):
+            s = sum(hand)
+            a = hand.count(11)
+            while s > 21 and a:
+                s -= 10
+                a -= 1
+            return s
+            
+        p_score = calc_score(player_hand)
+        
         embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.dark_red())
-        embed.add_field(name="Your Hand", value=f"{player_hand} (Score: {calculate_score(player_hand)})", inline=False)
+        embed.add_field(name="Your Hand", value=f"{player_hand} (Score: {p_score})", inline=False)
         embed.add_field(name="Dealer's Hand", value=f"[{dealer_hand[0]}, ?]", inline=False)
-        embed.set_footer(text="Type 'hit' or 'stand'")
         
-        msg = await ctx.send(embed=embed)
-
-        # Game Loop
-        while True:
-            if calculate_score(player_hand) == 21:
-                break # Instant 21 (or Blackjack)
-            
-            try:
-                response = await self.bot.wait_for(
-                    "message", 
-                    check=lambda m: m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ["hit", "stand"], 
-                    timeout=30.0
-                )
-            except asyncio.TimeoutError:
-                await ctx.send("Time's up! You stand.")
-                break
-
-            if response.content.lower() == "hit":
-                player_hand.append(deck.pop())
-                score = calculate_score(player_hand)
-                
-                embed.set_field_at(0, name="Your Hand", value=f"{player_hand} (Score: {score})", inline=False)
-                await msg.edit(embed=embed)
-
-                if score > 21:
-                    await ctx.send(f"💥 Bust! You went over 21. You lost **${amount}**.")
-                    return
-            else:
-                break
-
-        # Dealer Turn
-        dealer_score = calculate_score(dealer_hand)
-        while dealer_score < 17:
-            dealer_hand.append(deck.pop())
-            dealer_score = calculate_score(dealer_hand)
-
-        player_score = calculate_score(player_hand)
-
-        embed.set_field_at(0, name="Your Hand", value=f"{player_hand} (Score: {player_score})", inline=False)
-        embed.set_field_at(1, name="Dealer's Hand", value=f"{dealer_hand} (Score: {dealer_score})", inline=False)
-        await msg.edit(embed=embed)
-
-        if player_score > 21:
-            await ctx.send(f"💥 Bust! You lost **${amount}**.") # Should be caught above, but safety net
-        elif dealer_score > 21:
-            winnings = amount * 2
-            await self.update_balance(ctx.author.id, winnings)
-            await ctx.send(f"🎉 Dealer Bust! You won **${winnings}**!")
-        elif player_score > dealer_score:
-            winnings = amount * 2
-            await self.update_balance(ctx.author.id, winnings)
-            await ctx.send(f"🎉 You won **${winnings}**!")
-        elif player_score == dealer_score:
-            await self.update_balance(ctx.author.id, amount)
-            await ctx.send("🤝 Push! Your bet is returned.")
-        else:
-            await ctx.send(f"📉 Dealer wins. You lost **${amount}**.")
-
-            await ctx.send(f"📉 Dealer wins. You lost **${amount}**.")
-
-    @commands.hybrid_command(description="Guess if the next number (1-100) is higher or lower.")
-    async def highlow(self, ctx, amount: int, choice: str):
-        if amount <= 0: return await ctx.send("Amount must be positive.")
+        msg = await channel.send(f"<@{user.id}>", embed=embed)
         
-        balance = await self.get_balance(ctx.author.id)
-        if balance < amount: return await ctx.send("Insufficient funds.")
-
-        choice = choice.lower()
-        if choice not in ["higher", "lower", "high", "low"]:
-            return await ctx.send("Choice must be 'higher' or 'lower'.")
-        
-        # Deduct bet
-        await self.update_balance(ctx.author.id, -amount, "HighLow Bet")
-
-        current = random.randint(1, 100)
-        await ctx.send(f"Current number is **{current}**. Will the next be higher or lower?")
-        await asyncio.sleep(2)
-
-        next_num = random.randint(1, 100)
-        
-        win = False
-        if choice.startswith("h"):
-            if next_num > current: win = True
-        else:
-            if next_num < current: win = True
-            
-        if next_num == current:
-            # Push
-            await self.update_balance(ctx.author.id, amount, "HighLow Push")
-            await ctx.send(f"The number was **{next_num}**. It's a tie! Bet returned.")
+        if p_score == 21:
+            winnings = int(bet * 2.5)
+            await self.update_balance(user.id, winnings, "Blackjack 21")
+            embed.description = f"🎉 **Blackjack!** You won **${winnings}**!"
+            await msg.edit(embed=embed)
             return
+            
+        view = BlackjackView(self, user, bet, deck, player_hand, dealer_hand, msg)
+        await msg.edit(view=view)
 
-        if win:
-            winnings = int(amount * 1.8) # 1.8x multiplier
-            await self.update_balance(ctx.author.id, winnings, "HighLow Win")
-            await ctx.send(f"The number was **{next_num}**. You won **${winnings}**!")
-        else:
-            await ctx.send(f"The number was **{next_num}**. You lost **${amount}**.")
+    async def start_highlow(self, channel, user, bet):
+        current = random.randint(1, 100)
+        embed = discord.Embed(title="📈 High / Low 📉", description=f"The current number is **{current}**.\nWill the next number be Higher or Lower?", color=discord.Color.blue())
+        msg = await channel.send(f"<@{user.id}>", embed=embed)
+        view = HighLowView(self, user, bet, current, msg)
+        await msg.edit(view=view)
 
-    @casino_group.command(description="Roll two dice. Pairs win!")
-    async def snakeeyes(self, ctx, amount: int):
-        if amount <= 0: return await ctx.send("Amount must be positive.")
+    async def start_coinflip(self, channel, user, bet):
+        embed = discord.Embed(title="🪙 Coin Flip", description="Choose Heads or Tails!", color=discord.Color.gold())
+        msg = await channel.send(f"<@{user.id}>", embed=embed)
+        view = CoinFlipView(self, user, bet, msg)
+        await msg.edit(view=view)
+
+    async def start_snakeeyes(self, channel, user, bet):
+        embed = discord.Embed(title="🎲 Snake Eyes", description="Rolling the dice...", color=discord.Color.purple())
+        msg = await channel.send(f"<@{user.id}>", embed=embed)
         
-        balance = await self.get_balance(ctx.author.id)
-        if balance < amount: return await ctx.send("Insufficient funds.")
-
-        # Deduct bet
-        await self.update_balance(ctx.author.id, -amount, "SnakeEyes Bet")
-
+        await asyncio.sleep(1.5)
         d1 = random.randint(1, 6)
         d2 = random.randint(1, 6)
         
-        msg = await ctx.send("🎲 Rolling...")
-        await asyncio.sleep(1)
-        
-        await msg.edit(content=f"🎲 You rolled **{d1}** and **{d2}**!")
-        
         if d1 == 1 and d2 == 1:
-            # Snake Eyes (30x)
-            winnings = amount * 30
-            await self.update_balance(ctx.author.id, winnings, "SnakeEyes Jackpot")
-            await ctx.send(f"🐍 **SNAKE EYES!** You won **${winnings}** (30x)!")
+            async with self.bot.db.execute("SELECT amount FROM casino_jackpot WHERE id = 1") as cursor:
+                jp = await cursor.fetchone()[0]
+            await self.update_balance(user.id, jp, "Mega Jackpot Win")
+            await self.bot.db.execute("UPDATE casino_jackpot SET amount = 10000 WHERE id = 1")
+            await self.bot.db.commit()
+            embed.description = f"You rolled **{d1}** and **{d2}**!\n\n🚨 **SNAKE EYES MEGA JACKPOT!!!** 🚨\nYou won the entire pool of **${jp:,}**!"
+            embed.color = discord.Color.green()
         elif d1 == d2:
-            # Pair (5x)
-            winnings = amount * 5
-            await self.update_balance(ctx.author.id, winnings, "SnakeEyes Pair")
-            await ctx.send(f"🎉 **PAIR!** You won **${winnings}** (5x)!")
+            winnings = bet * 5
+            await self.update_balance(user.id, winnings, "SnakeEyes Pair")
+            embed.description = f"You rolled **{d1}** and **{d2}**!\n\n🎉 **PAIR!** You won **${winnings}** (5x)!"
+            embed.color = discord.Color.green()
         else:
-            await ctx.send(f"😢 No pair. You lost **${amount}**.")
+            await self.add_to_jackpot(bet)
+            embed.description = f"You rolled **{d1}** and **{d2}**.\n\n😢 No pair. You lost **${bet}**."
+            embed.color = discord.Color.red()
+            
+        await msg.edit(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Gambling(bot))
