@@ -138,8 +138,8 @@ class Store(commands.Cog):
         await self.bot.db.commit()
         await ctx.send(f"✅ Store populated with {added} new community items!")
 
-    @store_group.command(description="Craft special items using raw materials from the store.")
-    async def craft(self, ctx, recipe: str):
+    @store_group.command(description="Craft special items using raw materials from the store. Leave blank to view recipes.")
+    async def craft(self, ctx, recipe: str = None):
         recipes = {
             "mining rig": {"Iron Ore": 10, "Wood": 5},
             "safe": {"Wood": 10, "Magic Dust": 5},
@@ -148,8 +148,7 @@ class Store(commands.Cog):
             "insider bot": {"Silicon Chip": 10, "Gold Bar": 5},
             "lockpick set": {"Iron Ore": 5, "Copper Wire": 2}
         }
-        
-        recipe_key = recipe.lower()
+        recipe_key = recipe.lower() if recipe else ""
         if recipe_key not in recipes:
             embed = discord.Embed(title="🛠️ Crafting Recipes", color=discord.Color.orange())
             embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
