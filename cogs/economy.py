@@ -226,7 +226,84 @@ class CrimeView(discord.ui.View):
 
     @discord.ui.button(label="Bank Heist (Hard)", style=discord.ButtonStyle.red, emoji="🏦")
     async def btn_hard(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.process_crime(interaction, "Bank Heist", 0.15, 2000, 5000, 1000, 2000)
+        await self.process_work(interaction, "Fast Food Cashier", "🍔", 0.95, 30, 80)
+
+
+class BegView(discord.ui.View):
+    def __init__(self, cog, user):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user != self.user:
+            await interaction.response.send_message("You can't beg on someone else's corner!", ephemeral=True)
+            return False
+        return True
+
+    async def process_beg(self, interaction, target_name, success_chance, min_reward, max_reward, success_msgs, fail_msgs):
+        for item in self.children:
+            item.disabled = True
+            
+        embed = discord.Embed(title="🤲 Begging on the Streets", color=discord.Color.gold())
+        
+        if random.random() < success_chance:
+            earnings = random.randint(min_reward, max_reward)
+            await self.cog.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, self.user.id))
+            await self.cog.bot.db.commit()
+            await self.cog.log_transaction(self.user.id, "beg", earnings, f"Begged {target_name} successfully")
+            
+            msg = random.choice(success_msgs).format(amount=earnings)
+            embed.description = f"**{target_name}** {msg}"
+            embed.color = discord.Color.green()
+        else:
+            msg = random.choice(fail_msgs)
+            embed.description = f"**{target_name}** {msg}"
+            embed.color = discord.Color.red()
+            
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Sweet Old Lady", style=discord.ButtonStyle.success, emoji="👵")
+    async def btn_lady(self, interaction: discord.Interaction, button: discord.ui.Button):
+        success_msgs = [
+            "smiles warmly and hands you **${amount}**. 'Buy yourself something nice, dear.'",
+            "pats your head and gives you **${amount}**. 'Stay out of trouble!'",
+            "rummages through her purse and finds **${amount}** for you."
+        ]
+        fail_msgs = [
+            "couldn't hear you and kept walking.",
+            "thought you were selling girl scout cookies and walked away.",
+            "hit you with her purse and yelled 'Stranger danger!'"
+        ]
+        await self.process_beg(interaction, "The Sweet Old Lady", 0.85, 5, 25, success_msgs, fail_msgs)
+
+    @discord.ui.button(label="Rich Businessman", style=discord.ButtonStyle.primary, emoji="👔")
+    async def btn_businessman(self, interaction: discord.Interaction, button: discord.ui.Button):
+        success_msgs = [
+            "tosses **${amount}** at you without looking up from his phone.",
+            "feels a rare moment of pity and writes you a check for **${amount}**.",
+            "drops his wallet! You politely return it and he rewards you with **${amount}**!"
+        ]
+        fail_msgs = [
+            "scoffs at you. 'Get a job, hippie!'",
+            "calls security to have you removed from the sidewalk.",
+            "ignores you completely. Time is money!"
+        ]
+        await self.process_beg(interaction, "The Rich Businessman", 0.40, 50, 200, success_msgs, fail_msgs)
+
+    @discord.ui.button(label="Passing Celebrity", style=discord.ButtonStyle.danger, emoji="⭐")
+    async def btn_celebrity(self, interaction: discord.Interaction, button: discord.ui.Button):
+        success_msgs = [
+            "takes a selfie with you and tips you **${amount}** for the PR!",
+            "makes it rain! You manage to grab **${amount}** from the air.",
+            "says 'Don't spend it all in one place!' and hands you **${amount}**."
+        ]
+        fail_msgs = [
+            "hides their face from the paparazzi and runs away.",
+            "has their bodyguard shove you into a trash can.",
+            "thinks you're an obsessed fan and calls the police."
+        ]
+        await self.process_beg(interaction, "The Passing Celebrity", 0.20, 150, 500, success_msgs, fail_msgs)
 
 class Economy(commands.Cog):
     def __init__(self, bot):
@@ -575,17 +652,16 @@ class Economy(commands.Cog):
         view = WorkView(self, ctx.author, shifts)
         await ctx.send(embed=embed, view=view)
 
-    @commands.hybrid_command(description="Beg for some coins (5m cooldown).")
+    @commands.hybrid_command(description="Beg for some coins on the streets (5m cooldown).")
     @commands.cooldown(1, 300, commands.BucketType.user)
     async def beg(self, ctx):
-        if random.random() < 0.7: # 70% success
-            earnings = random.randint(10, 50)
-            await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
-            await self.bot.db.commit()
-            await self.log_transaction(ctx.author.id, "beg", earnings, "Begged successfully")
-            await ctx.send(f"🥺 Someone felt bad and gave you **${earnings}**!")
-        else:
-            await ctx.send("🛑 Everyone ignored you. Try again later.")
+        embed = discord.Embed(title="🤲 Begging on the Streets", description="You're sitting on the sidewalk with a cup. Who do you want to beg to?", color=discord.Color.gold())
+        embed.add_field(name="👵 Sweet Old Lady", value="High chance of success, low reward.", inline=False)
+        embed.add_field(name="👔 Rich Businessman", value="Medium chance of success, medium reward.", inline=False)
+        embed.add_field(name="⭐ Passing Celebrity", value="Low chance of success, high reward.", inline=False)
+        
+        view = BegView(self, ctx.author)
+        await ctx.send(embed=embed, view=view)
 
     @commands.hybrid_command(description="Search for coins (15m cooldown).")
     @commands.cooldown(1, 900, commands.BucketType.user)
