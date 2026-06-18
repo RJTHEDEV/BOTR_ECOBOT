@@ -16,6 +16,6 @@ sudo apt-get install -y ffmpeg python3-pip python3-venv
 
 # 4. Install Python requirements
 echo "Installing Python requirements..."
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --break-system-packages
 
 echo "Setup complete! You can now run the bot with: python3 bot.py"
