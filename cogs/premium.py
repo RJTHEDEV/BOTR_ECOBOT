@@ -13,24 +13,19 @@ class Premium(commands.Cog):
     async def store(self, ctx):
         embed = discord.Embed(title="💎 Premium Store: Buy Tickets!", color=discord.Color.gold())
         embed.description = (
-            "Support the bot's development and gain exclusive perks by purchasing **Tickets (🎟️)** with Crypto or Fiat!\n\n"
+            "Support the bot's development and gain exclusive perks by purchasing **Tickets (🎟️)**!\n\n"
             "Tickets can be used to buy premium items in `/premium perks`, bypass cooldowns, and craft powerful upgrades.\n\n"
-            "**Ticket Packages (Crypto/Card):**\n"
+            "**Ticket Packages (Crypto Available):**\n"
             "🎟️ **10 Tickets** - $2.99\n"
             "🎟️ **50 Tickets** - $9.99 (Best Value!)\n"
             "🎟️ **200 Tickets** - $29.99 (Whale Tier)\n\n"
             "👑 **Wall Street VIP Subscription** - $5.00/mo\n"
             "Includes 50 Tickets instantly, +1 Ticket every day you `/daily`, and a custom profile badge!\n\n"
-            "*(For Crypto payments, click the store link below. For manual CashApp/PayPal, contact an Admin!)*"
+            "*(To purchase using Crypto (BTC, ETH, SOL, etc.) or CashApp/PayPal, please open a Support Ticket or contact an Admin!)*"
         )
         embed.set_footer(text="Thank you for supporting JJonWallStreet!")
         
-        # Add a placeholder button for the future store link
-        view = discord.ui.View()
-        store_btn = discord.ui.Button(label="Open Web Store (Crypto Supported)", style=discord.ButtonStyle.link, url="https://discord.com/")
-        view.add_item(store_btn)
-        
-        await ctx.send(embed=embed, view=view)
+        await ctx.send(embed=embed)
 
     @premium.command(name="perks", description="Spend your Tickets on Premium Perks!")
     async def perks(self, ctx, perk: str = None):
