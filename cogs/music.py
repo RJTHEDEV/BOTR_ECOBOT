@@ -56,11 +56,11 @@ class Music(commands.Cog):
 
     @music_group.command(description="Join the voice channel.")
     async def join(self, ctx):
-        if not ctx.message.author.voice:
+        if not ctx.author.voice:
             await ctx.send("You are not connected to a voice channel.")
             return
         else:
-            channel = ctx.message.author.voice.channel
+            channel = ctx.author.voice.channel
         
         if ctx.voice_client is not None:
             return await ctx.voice_client.move_to(channel)
