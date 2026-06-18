@@ -1,4 +1,4 @@
-﻿import discord
+import discord
 from discord.ext import commands
 import os
 import asyncio
@@ -153,6 +153,7 @@ class BOTR(commands.Bot):
                     channel_id INTEGER,
                     kick_username TEXT,
                     is_live INTEGER DEFAULT 0,
+                    discord_user_id INTEGER,
                     custom_message TEXT
                 )
             ''')
@@ -165,6 +166,7 @@ class BOTR(commands.Bot):
                     tiktok_username TEXT,
                     is_live INTEGER DEFAULT 0,
                     last_video_id TEXT,
+                    discord_user_id INTEGER,
                     custom_message TEXT
                 )
             ''')
@@ -185,6 +187,7 @@ class BOTR(commands.Bot):
                     channel_id INTEGER,
                     youtube_channel_id TEXT,
                     last_video_id TEXT,
+                    discord_user_id INTEGER,
                     custom_message TEXT
                 )
             ''')
@@ -197,6 +200,7 @@ class BOTR(commands.Bot):
                     channel_id INTEGER,
                     twitch_username TEXT,
                     is_live INTEGER DEFAULT 0,
+                    discord_user_id INTEGER,
                     custom_message TEXT
                 )
             ''')
@@ -212,6 +216,15 @@ class BOTR(commands.Bot):
             ''')
             # Store Table
             try: await cursor.execute("ALTER TABLE store ADD COLUMN currency TEXT DEFAULT 'coins'")
+            except: pass
+            # Migration: Add discord_user_id to alert tables
+            try: await cursor.execute("ALTER TABLE kick_alerts ADD COLUMN discord_user_id INTEGER")
+            except: pass
+            try: await cursor.execute("ALTER TABLE tiktok_alerts ADD COLUMN discord_user_id INTEGER")
+            except: pass
+            try: await cursor.execute("ALTER TABLE youtube_alerts ADD COLUMN discord_user_id INTEGER")
+            except: pass
+            try: await cursor.execute("ALTER TABLE twitch_alerts ADD COLUMN discord_user_id INTEGER")
             except: pass
 
             # Phase 2 Columns
