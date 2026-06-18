@@ -238,6 +238,51 @@ class Economy(commands.Cog):
     def cog_unload(self):
         self.bank_interest_task.cancel()
 
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot or not message.guild:
+            return
+
+        now = time.time()
+        # 60 second cooldown per user for XP
+        if message.author.id in self.last_xp_time:
+            if now - self.last_xp_time[message.author.id] < 60:
+                return
+                
+        self.last_xp_time[message.author.id] = now
+        xp_gain = random.randint(15, 25)
+        
+        async with self.bot.db.execute("SELECT xp, level FROM users WHERE user_id = ?", (message.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            
+        if not row:
+            await self.bot.db.execute("INSERT INTO users (user_id, xp, level) VALUES (?, ?, 1)", (message.author.id, xp_gain))
+            await self.bot.db.commit()
+            return
+            
+        current_xp, current_level = row
+        new_xp = current_xp + xp_gain
+        
+        # Level up formula: level * 100
+        xp_needed = current_level * 100
+        
+        if new_xp >= xp_needed:
+            new_level = current_level + 1
+            new_xp = new_xp - xp_needed
+            reward_coins = new_level * 500
+            reward_tickets = 1 if new_level % 5 == 0 else 0
+            
+            await self.bot.db.execute("UPDATE users SET xp = ?, level = ?, balance = balance + ?, tickets = tickets + ? WHERE user_id = ?", 
+                                     (new_xp, new_level, reward_coins, reward_tickets, message.author.id))
+            await self.bot.db.commit()
+            
+            ticket_msg = f" and 🎟️ **{reward_tickets} Ticket(s)**" if reward_tickets > 0 else ""
+            embed = discord.Embed(title="🆙 Level Up!", description=f"Congratulations {message.author.mention}! You've reached **Level {new_level}**!\n\nYou've been awarded **${reward_coins}**{ticket_msg}!", color=discord.Color.blue())
+            await message.channel.send(embed=embed)
+        else:
+            await self.bot.db.execute("UPDATE users SET xp = ? WHERE user_id = ?", (new_xp, message.author.id))
+            await self.bot.db.commit()
+
     @tasks.loop(hours=24)
     async def bank_interest_task(self):
         # 1% daily interest for bank balances over 0
@@ -247,6 +292,7 @@ class Economy(commands.Cog):
     @bank_interest_task.before_loop
     async def before_bank_interest_task(self):
         await self.bot.wait_until_ready()
+        
     async def log_transaction(self, user_id, type, amount, description):
         timestamp = datetime.datetime.now().isoformat()
         await self.bot.db.execute("INSERT INTO transaction_logs (user_id, type, amount, description, timestamp) VALUES (?, ?, ?, ?, ?)", 
@@ -392,6 +438,8 @@ class Economy(commands.Cog):
                 # Check for Crafted Items (Passive Income)
                 rig_bonus = 0
                 server_bonus = 0
+                penthouse_bonus = 0
+                island_bonus = 0
                 ticket_bonus = 0
                 
                 async with self.bot.db.execute("SELECT item_name, quantity FROM inventory WHERE user_id = ?", (ctx.author.id,)) as cursor:
@@ -400,12 +448,14 @@ class Economy(commands.Cog):
                     
                 rig_bonus = 200 * inventory.get('Mining Rig', 0)
                 server_bonus = 1000 * inventory.get('Server Rack', 0)
+                penthouse_bonus = 10000 * inventory.get('Penthouse Suite', 0)
+                island_bonus = 100000 * inventory.get('Private Island', 0)
                 ticket_bonus = 1 * inventory.get('Insider Bot', 0)
 
                 base_amount = 500
                 level_bonus = level * 50
                 streak_bonus = effective_streak * 50
-                total_amount = base_amount + level_bonus + streak_bonus + rig_bonus + server_bonus
+                total_amount = base_amount + level_bonus + streak_bonus + rig_bonus + server_bonus + penthouse_bonus + island_bonus
                 
                 await self.bot.db.execute("UPDATE users SET balance = balance + ?, tickets = tickets + ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
                                           (total_amount, ticket_bonus, today, streak, ctx.author.id))
@@ -422,6 +472,10 @@ class Economy(commands.Cog):
             embed.add_field(name="Mining Rigs", value=f"${rig_bonus} 🖥️", inline=True)
         if server_bonus > 0:
             embed.add_field(name="Server Racks", value=f"${server_bonus} 🗄️", inline=True)
+        if penthouse_bonus > 0:
+            embed.add_field(name="Penthouses", value=f"${penthouse_bonus} 🏢", inline=True)
+        if island_bonus > 0:
+            embed.add_field(name="Private Islands", value=f"${island_bonus} 🏝️", inline=True)
         if ticket_bonus > 0:
             embed.add_field(name="Insider Bots", value=f"🎟️ {ticket_bonus}", inline=True)
             
@@ -707,6 +761,62 @@ class Economy(commands.Cog):
             await ctx.send(embed=embed)
         else:
             await ctx.send(f"❌ **{item_name.title()}** is not a usable item.")
+
+    @commands.hybrid_command(description="Bounty hunt a wanted criminal!")
+    @commands.cooldown(1, 3600, commands.BucketType.user)
+    async def bounty(self, ctx, target: discord.Member):
+        if target.bot or target == ctx.author:
+            return await ctx.send("You can't hunt them.")
+
+        async with self.bot.db.execute("SELECT wanted_level, balance FROM users WHERE user_id = ?", (target.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return await ctx.send(f"{target.display_name} doesn't even have a bank account, let alone a bounty.")
+            
+            wanted_level = row[0]
+            target_bal = row[1]
+            
+        if wanted_level < 3:
+            return await ctx.send(f"❌ {target.display_name} only has a **{wanted_level}-Star** wanted level. You can only hunt players with **3 or more stars**.")
+
+        # Hunting logic
+        # 3 stars = 60% chance to fail, 4 stars = 50%, 5 stars = 40%
+        # The higher the wanted level, the more money you get, but maybe harder?
+        # Let's make it fixed 50/50 for now.
+        success_chance = 0.50
+        
+        if random.random() < success_chance:
+            # Hunter wins!
+            # Take up to 50% of the target's balance + a massive bonus from the state
+            bounty_bonus = wanted_level * 2000
+            stolen_money = int(target_bal * 0.5)
+            total_reward = bounty_bonus + stolen_money
+            
+            await self.bot.db.execute("UPDATE users SET balance = balance - ?, wanted_level = 0 WHERE user_id = ?", (stolen_money, target.id))
+            await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (total_reward, ctx.author.id))
+            await self.bot.db.commit()
+            
+            await self.log_transaction(ctx.author.id, "bounty", total_reward, f"Hunted {target.display_name}")
+            await self.log_transaction(target.id, "bounty", -stolen_money, f"Busted by {ctx.author.display_name}")
+            
+            embed = discord.Embed(title="🎯 BOUNTY CLAIMED!", description=f"You successfully hunted down the notorious {target.mention}!", color=discord.Color.green())
+            embed.add_field(name="Target Arrested", value="Their Wanted Level has been reset to 0.", inline=False)
+            embed.add_field(name="Reward Claimed", value=f"State Bounty: **${bounty_bonus}**\nConfiscated Cash: **${stolen_money}**\n\nTotal Payout: **${total_reward}**", inline=False)
+            await ctx.send(embed=embed)
+        else:
+            # Criminal wins!
+            # Hunter pays a hospital bill and criminal gets a star
+            fine = random.randint(1000, 3000)
+            new_wanted = min(5, wanted_level + 1)
+            
+            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+            await self.bot.db.execute("UPDATE users SET wanted_level = ? WHERE user_id = ?", (new_wanted, target.id))
+            await self.bot.db.commit()
+            
+            embed = discord.Embed(title="🚑 HUNT FAILED!", description=f"{target.mention} completely outsmarted you and escaped!", color=discord.Color.red())
+            embed.add_field(name="Hospital Bill", value=f"You got beat up and paid **${fine}** in medical bills.", inline=False)
+            embed.add_field(name="Target Status", value=f"Their Wanted Level increased to **{'⭐' * new_wanted}**", inline=False)
+            await ctx.send(embed=embed)
 
     @commands.hybrid_command(aliases=["top"], description="View the interactive Global Leaderboards.")
     async def leaderboard(self, ctx):

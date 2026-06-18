@@ -112,6 +112,8 @@ class Store(commands.Cog):
             ('Trading Floor Pass', 200000, 'Access to the premium trading floor', 'coins', 'Trading & Economy'),
             ('Options Signals', 10, '1 week of premium options alerts', 'tickets', 'Trading & Economy'),
             ('Stock Tip', 50000, 'One exclusive insider stock tip', 'coins', 'Trading & Economy'),
+            ('Penthouse Suite', 500000, 'Grants $10,000 passive income daily!', 'coins', 'Real Estate'),
+            ('Private Island', 5000000, 'Grants $100,000 passive income daily!', 'coins', 'Real Estate'),
             ('Gold Name Color', 100000, 'Paint your name gold in chat', 'coins', 'Cosmetics & Flex'),
             ('Diamond Badge', 20, 'Exclusive diamond badge next to your name', 'tickets', 'Cosmetics & Flex'),
             ('Custom Command', 50, 'We will program a custom bot command for you', 'tickets', 'Cosmetics & Flex'),
