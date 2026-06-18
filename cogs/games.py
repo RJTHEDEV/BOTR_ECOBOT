@@ -184,18 +184,60 @@ class Games(commands.Cog):
 
     @commands.hybrid_command(name="8ball", description="Ask the Magic 8 Ball a question.")
     async def magic8ball(self, ctx, *, question: str):
+        if not question.endswith("?"):
+            question += "?"
+            
         responses = [
+            # Standard positive
             "It is certain.", "It is decidedly so.", "Without a doubt.", "Yes definitely.",
             "You may rely on it.", "As I see it, yes.", "Most likely.", "Outlook good.",
-            "Yes.", "Signs point to yes.", "Reply hazy, try again.", "Ask again later.",
-            "Better not tell you now.", "Cannot predict now.", "Concentrate and ask again.",
+            "Yes.", "Signs point to yes.",
+            # Standard neutral
+            "Reply hazy, try again.", "Ask again later.", "Better not tell you now.", 
+            "Cannot predict now.", "Concentrate and ask again.",
+            # Standard negative
             "Don't count on it.", "My reply is no.", "My sources say no.",
-            "Outlook not so good.", "Very doubtful."
+            "Outlook not so good.", "Very doubtful.",
+            # Sassy/Funny
+            "Why are you asking me? I'm just a bot.", "Absolutely not, and you know it.", 
+            "In your dreams.", "100% Yes. Bet your life savings on it.", 
+            "I'd say yes, but I don't want to lie to you.", "Bruh, no.",
+            "Only on a Tuesday.", "Ask your mother."
         ]
-        embed = discord.Embed(title="🎱 Magic 8 Ball", color=discord.Color.dark_theme())
+        
+        embed = discord.Embed(title="🎱 Magic 8 Ball", description="*Shaking the ball...*", color=discord.Color.dark_theme())
         embed.add_field(name="Question", value=question, inline=False)
-        embed.add_field(name="Answer", value=random.choice(responses), inline=False)
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
+        
+        await asyncio.sleep(0.5)
+        embed.description = "*Shaking the ball... 🎱*"
+        await msg.edit(embed=embed)
+        
+        await asyncio.sleep(0.5)
+        embed.description = "*Shaking the ball... 🎱✨*"
+        await msg.edit(embed=embed)
+        
+        await asyncio.sleep(0.5)
+        embed.description = None
+        
+        answer = random.choice(responses)
+        color = discord.Color.dark_theme()
+        if answer in responses[:10]: # Positive
+            color = discord.Color.green()
+        elif answer in responses[10:15]: # Neutral
+            color = discord.Color.gold()
+        elif answer in responses[15:20]: # Negative
+            color = discord.Color.red()
+        else: # Sassy
+            color = discord.Color.purple()
+            
+        embed.color = color
+        embed.add_field(name="Answer", value=f"**{answer}**", inline=False)
+        
+        # Add a nice thumbnail
+        embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/8-Ball_Pool.svg/1024px-8-Ball_Pool.svg.png")
+        
+        await msg.edit(embed=embed)
 
     @commands.hybrid_command(description="Play Tic-Tac-Toe with another user.")
     async def tictactoe(self, ctx, opponent: discord.Member):
