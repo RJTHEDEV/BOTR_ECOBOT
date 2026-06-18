@@ -107,8 +107,21 @@ class Sportsbook(commands.Cog):
                                   (msg.id, ctx.guild.id, question))
         await self.bot.db.commit()
 
+    async def bet_autocomplete(self, interaction: discord.Interaction, current: str) -> list[discord.app_commands.Choice[str]]:
+        async with self.bot.db.execute("SELECT message_id, question FROM active_bets WHERE guild_id = ? AND status = 'open'", (interaction.guild.id,)) as cursor:
+            bets = await cursor.fetchall()
+            
+        choices = []
+        for b_id, question in bets:
+            q_trunc = (question[:85] + '...') if len(question) > 85 else question
+            if current.lower() in q_trunc.lower() or current in str(b_id):
+                choices.append(discord.app_commands.Choice(name=f"{q_trunc}", value=str(b_id)))
+                
+        return choices[:25]
+
     @bet.command(name="resolve", description="Resolve a bet and payout winners.")
     @commands.has_permissions(manage_messages=True)
+    @discord.app_commands.autocomplete(message_id=bet_autocomplete)
     async def resolve(self, ctx, message_id: str, winning_choice: str):
         try:
             bet_id = int(message_id)
