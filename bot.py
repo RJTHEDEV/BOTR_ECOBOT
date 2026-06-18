@@ -158,6 +158,18 @@ class BOTR(commands.Bot):
                 )
             ''')
             
+            # Twitch Alerts Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS twitch_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    channel_id INTEGER,
+                    twitch_username TEXT,
+                    is_live INTEGER DEFAULT 0,
+                    custom_message TEXT
+                )
+            ''')
+            
             # Inventory Table
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS inventory (
