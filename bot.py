@@ -164,6 +164,7 @@ class BOTR(commands.Bot):
                     channel_id INTEGER,
                     tiktok_username TEXT,
                     is_live INTEGER DEFAULT 0,
+                    last_video_id TEXT,
                     custom_message TEXT
                 )
             ''')

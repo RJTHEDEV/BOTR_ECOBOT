@@ -372,19 +372,32 @@ class Notifications(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def add_tiktok(self, ctx, tiktok_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
         tiktok_username = tiktok_username.replace("@", "")
+        
+        # Initial fetch of latest video id
+        last_video_id = ""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'https://www.tikwm.com/api/user/posts?unique_id={tiktok_username}&count=1') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('data') and data['data'].get('videos'):
+                            last_video_id = data['data']['videos'][0]['video_id']
+        except Exception as e:
+            print(f"Failed to fetch initial TikTok video: {e}")
+
         async with self.bot.db.execute("SELECT id FROM tiktok_alerts WHERE guild_id = ? AND tiktok_username = ?", (ctx.guild.id, tiktok_username.lower())) as cursor:
             if await cursor.fetchone():
                 await ctx.send("❌ This TikTok channel is already being monitored in this server!", ephemeral=True)
                 return
 
         await self.bot.db.execute(
-            "INSERT INTO tiktok_alerts (guild_id, channel_id, tiktok_username, is_live, custom_message) VALUES (?, ?, ?, ?, ?)",
-            (ctx.guild.id, discord_channel.id, tiktok_username.lower(), 0, custom_message)
+            "INSERT INTO tiktok_alerts (guild_id, channel_id, tiktok_username, is_live, last_video_id, custom_message) VALUES (?, ?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, tiktok_username.lower(), 0, last_video_id, custom_message)
         )
         await self.bot.db.commit()
 
         embed = discord.Embed(title="✅ TikTok Alerts Added", color=0x000000)
-        embed.description = f"Successfully set up notifications for `@{tiktok_username}`!\nWhenever they go live, I'll post in {discord_channel.mention}."
+        embed.description = f"Successfully set up live and upload notifications for `@{tiktok_username}`!\nI'll post in {discord_channel.mention}."
         await ctx.send(embed=embed)
 
     @notify_group.command(name="remove_tiktok", description="Stop monitoring a TikTok streamer.")
@@ -399,16 +412,17 @@ class Notifications(commands.Cog):
     async def check_tiktok(self):
         await self.bot.wait_until_ready()
         try:
-            async with self.bot.db.execute("SELECT id, guild_id, channel_id, tiktok_username, is_live, custom_message FROM tiktok_alerts") as cursor:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, tiktok_username, is_live, last_video_id, custom_message FROM tiktok_alerts") as cursor:
                 alerts = await cursor.fetchall()
                 
             if not alerts: return
             
             async with aiohttp.ClientSession() as session:
                 for alert in alerts:
-                    db_id, guild_id, discord_channel_id, tiktok_username, db_is_live, custom_message = alert
+                    db_id, guild_id, discord_channel_id, tiktok_username, db_is_live, db_last_video_id, custom_message = alert
                     
                     is_live_now = False
+                    # 1. Check Live Status
                     try:
                         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
                         async with session.get(f'https://www.tiktok.com/@{tiktok_username}/live', headers=headers) as resp:
@@ -416,8 +430,7 @@ class Notifications(commands.Cog):
                             if '"status":2' in text or '"roomStatus":2' in text:
                                 is_live_now = True
                     except Exception as e:
-                        print(f"TikTok check failed for {tiktok_username}: {e}")
-                        continue
+                        print(f"TikTok Live check failed for {tiktok_username}: {e}")
                         
                     if is_live_now and not db_is_live:
                         # WENT LIVE
@@ -438,12 +451,52 @@ class Notifications(commands.Cog):
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
-                            content = f"{custom_message}\n🎵 **@{tiktok_username}** is live now!"
+                            content = f"{custom_message}\n🔴 **@{tiktok_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
                         await self.bot.db.execute("UPDATE tiktok_alerts SET is_live = 0 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
+
+                    # 2. Check New Videos
+                    try:
+                        async with session.get(f'https://www.tikwm.com/api/user/posts?unique_id={tiktok_username}&count=1') as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if data.get('data') and data['data'].get('videos'):
+                                    video = data['data']['videos'][0]
+                                    video_id = video['video_id']
+                                    
+                                    if video_id != db_last_video_id:
+                                        # NEW VIDEO UPLOADED
+                                        title = video.get('title', f"New TikTok from @{tiktok_username}")
+                                        play_count = video.get('play_count', 0)
+                                        cover_url = video.get('cover', '')
+                                        
+                                        await self.bot.db.execute("UPDATE tiktok_alerts SET last_video_id = ? WHERE id = ?", (video_id, db_id))
+                                        await self.bot.db.commit()
+                                        
+                                        channel = self.bot.get_channel(discord_channel_id)
+                                        if channel:
+                                            url = f"https://www.tiktok.com/@{tiktok_username}/video/{video_id}"
+                                            embed = discord.Embed(
+                                                title=title, 
+                                                url=url, 
+                                                color=0x000000,
+                                                timestamp=discord.utils.utcnow()
+                                            )
+                                            embed.set_author(name=f"@{tiktok_username}", url=f"https://www.tiktok.com/@{tiktok_username}")
+                                            if cover_url: embed.set_image(url=cover_url)
+                                            embed.set_footer(text="TikTok", icon_url="https://cdn.iconscout.com/icon/free/png-256/free-tiktok-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png")
+                                                
+                                            view = discord.ui.View()
+                                            view.add_item(discord.ui.Button(label="Watch Video", style=discord.ButtonStyle.link, url=url))
+                                            
+                                            content = f"{custom_message}\n🎵 **@{tiktok_username}** just posted a new TikTok!"
+                                            await channel.send(content=content, embed=embed, view=view)
+                    except Exception as e:
+                        print(f"TikTok Video check failed for {tiktok_username}: {e}")
+
         except Exception as e:
             print(f"Error in tiktok alert loop: {e}")
 
