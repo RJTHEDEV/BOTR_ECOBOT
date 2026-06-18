@@ -22,6 +22,44 @@ class Notifications(commands.Cog):
     async def notify_group(self, ctx):
         pass
 
+    @notify_group.command(name="list", description="List all active content alerts in this server.")
+    @commands.has_permissions(administrator=True)
+    async def list_alerts(self, ctx):
+        embed = discord.Embed(title="📡 Active Server Alerts", color=discord.Color.blurple())
+        
+        async def fetch_alerts(table_name, name_col):
+            async with self.bot.db.execute(f"SELECT {name_col}, channel_id FROM {table_name} WHERE guild_id = ?", (ctx.guild.id,)) as cursor:
+                return await cursor.fetchall()
+
+        # YouTube
+        yt_alerts = await fetch_alerts('youtube_alerts', 'youtube_channel_id')
+        if yt_alerts:
+            lines = [f"• `{channel_id}` -> <#{discord_channel}>" for channel_id, discord_channel in yt_alerts]
+            embed.add_field(name="YouTube Channels", value="\n".join(lines), inline=False)
+            
+        # Twitch
+        tw_alerts = await fetch_alerts('twitch_alerts', 'twitch_username')
+        if tw_alerts:
+            lines = [f"• `{username}` -> <#{discord_channel}>" for username, discord_channel in tw_alerts]
+            embed.add_field(name="Twitch Streamers", value="\n".join(lines), inline=False)
+            
+        # Kick
+        kick_alerts = await fetch_alerts('kick_alerts', 'kick_username')
+        if kick_alerts:
+            lines = [f"• `{username}` -> <#{discord_channel}>" for username, discord_channel in kick_alerts]
+            embed.add_field(name="Kick Streamers", value="\n".join(lines), inline=False)
+            
+        # TikTok
+        tk_alerts = await fetch_alerts('tiktok_alerts', 'tiktok_username')
+        if tk_alerts:
+            lines = [f"• `@{username}` -> <#{discord_channel}>" for username, discord_channel in tk_alerts]
+            embed.add_field(name="TikTok Creators", value="\n".join(lines), inline=False)
+            
+        if not len(embed.fields):
+            embed.description = "No alerts are currently configured for this server."
+            
+        await ctx.send(embed=embed)
+
     @notify_group.command(name="youtube", description="Add a YouTube channel to post notifications for.")
     @commands.has_permissions(administrator=True)
     async def add_youtube(self, ctx, channel_id: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
