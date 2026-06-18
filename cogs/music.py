@@ -65,8 +65,15 @@ class Music(commands.Cog):
         if ctx.voice_client is not None:
             return await ctx.voice_client.move_to(channel)
         
-        await channel.connect()
-        await ctx.send(f"Joined {channel.name}")
+        try:
+            await channel.connect()
+            await ctx.send(f"Joined {channel.name}")
+        except Exception as e:
+            try:
+                await ctx.send(f"❌ Failed to join voice channel! Error: `{type(e).__name__}: {e}`")
+            except:
+                pass
+            print(f"Voice Connection Error: {type(e).__name__}: {e}")
 
     @music_group.command(description="Play audio from a YouTube URL or search query.")
     async def play(self, ctx, *, query: str):
