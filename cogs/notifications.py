@@ -538,5 +538,39 @@ class Notifications(commands.Cog):
         except Exception as e:
             print(f"Error in tiktok alert loop: {e}")
 
+    # ==========================================
+    # AUTO LIVE ROLE SYSTEM
+    # ==========================================
+
+    @commands.Cog.listener()
+    async def on_presence_update(self, before, after):
+        if not after.guild: return
+        
+        async with self.bot.db.execute("SELECT role_id FROM live_roles WHERE guild_id = ?", (after.guild.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row: return
+            live_role = after.guild.get_role(row[0])
+            if not live_role: return
+
+        was_streaming = any(isinstance(a, discord.Streaming) for a in before.activities) if before else False
+        is_streaming = any(isinstance(a, discord.Streaming) for a in after.activities) if after else False
+
+        if is_streaming and not was_streaming:
+            try: await after.add_roles(live_role, reason="Auto Live Role")
+            except: pass
+        elif not is_streaming and was_streaming:
+            try: await after.remove_roles(live_role, reason="Auto Live Role")
+            except: pass
+
+    @commands.hybrid_command(name="set_live_role", description="Set a role to automatically give to users when they stream on Discord.")
+    @commands.has_permissions(administrator=True)
+    async def set_live_role(self, ctx, role: discord.Role):
+        await self.bot.db.execute(
+            "CREATE TABLE IF NOT EXISTS live_roles (guild_id INTEGER PRIMARY KEY, role_id INTEGER)"
+        )
+        await self.bot.db.execute("INSERT OR REPLACE INTO live_roles (guild_id, role_id) VALUES (?, ?)", (ctx.guild.id, role.id))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Auto-Live role successfully set to {role.mention}! When server members stream on Discord, they will get this role.")
+
 async def setup(bot):
     await bot.add_cog(Notifications(bot))

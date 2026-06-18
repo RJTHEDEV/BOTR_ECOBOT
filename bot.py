@@ -169,6 +169,14 @@ class BOTR(commands.Bot):
                 )
             ''')
             
+            # Live Roles
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS live_roles (
+                    guild_id INTEGER PRIMARY KEY,
+                    role_id INTEGER
+                )
+            ''')
+            
             # YouTube Alerts Table
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS youtube_alerts (
