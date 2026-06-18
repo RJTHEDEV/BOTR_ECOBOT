@@ -145,6 +145,19 @@ class BOTR(commands.Bot):
                     xp_boost_expiry TEXT
                 )
             ''')
+            
+            # YouTube Alerts Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS youtube_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    channel_id INTEGER,
+                    youtube_channel_id TEXT,
+                    last_video_id TEXT,
+                    custom_message TEXT
+                )
+            ''')
+            
             # Inventory Table
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS inventory (
