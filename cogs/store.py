@@ -115,6 +115,8 @@ class Store(commands.Cog):
             ('Gold Name Color', 100000, 'Paint your name gold in chat', 'coins', 'Cosmetics & Flex'),
             ('Diamond Badge', 20, 'Exclusive diamond badge next to your name', 'tickets', 'Cosmetics & Flex'),
             ('Custom Command', 50, 'We will program a custom bot command for you', 'tickets', 'Cosmetics & Flex'),
+            ('Fake ID', 10000, 'Clears your Wanted Level instantly.', 'coins', 'Consumables'),
+            ('Lawyer', 5, 'Clears your Wanted Level instantly.', 'tickets', 'Consumables'),
             ('Iron Ore', 1000, 'A hard metal used for crafting heavy items.', 'coins', 'Crafting Materials'),
             ('Wood', 500, 'Basic building material for crafting.', 'coins', 'Crafting Materials'),
             ('Magic Dust', 1, 'Mystical dust required for advanced technology and safes.', 'tickets', 'Crafting Materials'),

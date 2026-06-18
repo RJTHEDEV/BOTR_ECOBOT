@@ -114,6 +114,11 @@ class BOTR(commands.Bot):
             try: await cursor.execute("ALTER TABLE users ADD COLUMN last_rep TEXT")
             except: pass
 
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN work_shifts INTEGER DEFAULT 0")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN wanted_level INTEGER DEFAULT 0")
+            except: pass
+
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -128,7 +133,9 @@ class BOTR(commands.Bot):
                     last_crime TEXT,
                     last_rob TEXT,
                     last_rep TEXT,
-                    daily_streak INTEGER DEFAULT 0
+                    daily_streak INTEGER DEFAULT 0,
+                    work_shifts INTEGER DEFAULT 0,
+                    wanted_level INTEGER DEFAULT 0
                 )
             ''')
             # Inventory Table

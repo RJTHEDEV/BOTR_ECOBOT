@@ -4,6 +4,117 @@ import random
 import time
 import datetime
 
+class WorkView(discord.ui.View):
+    def __init__(self, cog, user, shifts):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+        self.shifts = shifts
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    def get_multiplier(self):
+        if self.shifts < 10: return 1.0 # Intern
+        if self.shifts < 50: return 2.0 # Junior
+        if self.shifts < 100: return 5.0 # Senior
+        return 10.0 # Hedge Fund Manager
+
+    async def process_work(self, interaction, job_name, guaranteed, min_pay, max_pay, fail_chance=0.0):
+        for item in self.children:
+            item.disabled = True
+            
+        mult = self.get_multiplier()
+        
+        if random.random() < fail_chance:
+            embed = discord.Embed(title="💼 Work Shift Failed", description=f"You tried to {job_name} but completely messed it up. You got fired for the day and earned nothing.", color=discord.Color.red())
+            await interaction.response.edit_message(embed=embed, view=self)
+            return
+
+        earnings = int(random.randint(min_pay, max_pay) * mult)
+        
+        await self.cog.bot.db.execute("UPDATE users SET balance = balance + ?, work_shifts = work_shifts + 1 WHERE user_id = ?", (earnings, self.user.id))
+        await self.cog.bot.db.commit()
+        await self.cog.log_transaction(self.user.id, "work", earnings, f"Worked: {job_name}")
+        
+        embed = discord.Embed(title="💼 Work Shift Complete", description=f"You decided to {job_name} and successfully earned **${earnings}**!", color=discord.Color.green())
+        
+        # Check for promotion
+        new_shifts = self.shifts + 1
+        if new_shifts == 10:
+            embed.add_field(name="🎉 PROMOTION!", value="You have been promoted to **Junior Trader**! Your payouts are doubled!", inline=False)
+        elif new_shifts == 50:
+            embed.add_field(name="🎉 PROMOTION!", value="You have been promoted to **Senior Trader**! Your payouts are now 5x!", inline=False)
+        elif new_shifts == 100:
+            embed.add_field(name="🎉 PROMOTION!", value="You have been promoted to **Hedge Fund Manager**! Your payouts are now 10x!", inline=False)
+            
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Mow Lawns (Safe)", style=discord.ButtonStyle.green, emoji="🌱")
+    async def btn_safe(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_work(interaction, "Mow Lawns", True, 50, 100)
+
+    @discord.ui.button(label="Flip Burgers (Medium)", style=discord.ButtonStyle.blurple, emoji="🍔")
+    async def btn_medium(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_work(interaction, "Flip Burgers", False, 100, 250, fail_chance=0.2)
+
+    @discord.ui.button(label="Day Trade (Risky)", style=discord.ButtonStyle.red, emoji="📈")
+    async def btn_risky(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_work(interaction, "Day Trade", False, 200, 500, fail_chance=0.5)
+
+class CrimeView(discord.ui.View):
+    def __init__(self, cog, user, wanted_level, laptop_count):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+        self.wanted_level = wanted_level
+        self.laptop_count = laptop_count
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    async def process_crime(self, interaction, target_name, success_rate, min_pay, max_pay, min_fine, max_fine):
+        for item in self.children:
+            item.disabled = True
+            
+        # Apply hacker laptop buff
+        actual_success_rate = success_rate + (0.05 * self.laptop_count)
+        
+        # Wanted level penalty multiplier
+        fine_mult = 1.0 + (0.5 * self.wanted_level) # +50% fine per wanted level
+
+        if random.random() < actual_success_rate:
+            earnings = random.randint(min_pay, max_pay) + (100 * self.laptop_count)
+            await self.cog.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, self.user.id))
+            await self.cog.bot.db.commit()
+            await self.cog.log_transaction(self.user.id, "crime", earnings, f"Crime success: {target_name}")
+            
+            embed = discord.Embed(title="🕵️ Crime Success!", description=f"You successfully pulled off a {target_name} and escaped with **${earnings}**!", color=discord.Color.green())
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            fine = int(random.randint(min_fine, max_fine) * fine_mult)
+            new_wanted = min(5, self.wanted_level + 1)
+            
+            await self.cog.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?), wanted_level = ? WHERE user_id = ?", (fine, new_wanted, self.user.id))
+            await self.cog.bot.db.commit()
+            await self.cog.log_transaction(self.user.id, "crime", -fine, f"Crime caught (fine)")
+            
+            embed = discord.Embed(title="🚓 BUSTED!", description=f"You got caught attempting a {target_name}!\nYou paid a fine of **${fine}**.", color=discord.Color.red())
+            embed.add_field(name="Wanted Level Increased", value=f"{'⭐' * new_wanted}\nBuy a Fake ID or Lawyer in the store to clear your name!", inline=False)
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Rob Gas Station (Easy)", style=discord.ButtonStyle.green, emoji="🏪")
+    async def btn_easy(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_crime(interaction, "Gas Station Robbery", 0.8, 100, 300, 50, 150)
+
+    @discord.ui.button(label="Hack WallStreet (Medium)", style=discord.ButtonStyle.blurple, emoji="💻")
+    async def btn_medium(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_crime(interaction, "WallStreet Hack", 0.5, 400, 1000, 200, 500)
+
+    @discord.ui.button(label="Bank Heist (Hard)", style=discord.ButtonStyle.red, emoji="🏦")
+    async def btn_hard(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process_crime(interaction, "Bank Heist", 0.15, 2000, 5000, 1000, 2000)
+
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -327,11 +438,20 @@ class Economy(commands.Cog):
     @commands.hybrid_command(description="Work to earn some coins (1h cooldown).")
     @commands.cooldown(1, 3600, commands.BucketType.user)
     async def work(self, ctx):
-        earnings = random.randint(50, 200)
-        await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
-        await self.bot.db.commit()
-        await self.log_transaction(ctx.author.id, "work", earnings, "Worked a shift")
-        await ctx.send(f"🔨 You worked hard and earned **${earnings}**!")
+        async with self.bot.db.execute("SELECT work_shifts FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            shifts = row[0] if row else 0
+            
+        title = "Intern"
+        if shifts >= 10: title = "Junior Trader"
+        if shifts >= 50: title = "Senior Trader"
+        if shifts >= 100: title = "Hedge Fund Manager"
+        
+        embed = discord.Embed(title=f"🏢 Welcome to Work, {title}!", description="Choose your shift for the next hour. Higher risk jobs pay more, but you might get fired and earn nothing!", color=discord.Color.blue())
+        embed.set_footer(text=f"Total Shifts Completed: {shifts}")
+        
+        view = WorkView(self, ctx.author, shifts)
+        await ctx.send(embed=embed, view=view)
 
     @commands.hybrid_command(description="Beg for some coins (5m cooldown).")
     @commands.cooldown(1, 300, commands.BucketType.user)
@@ -362,24 +482,22 @@ class Economy(commands.Cog):
     @commands.hybrid_command(description="Commit a crime (High risk/reward) (2h cooldown).")
     @commands.cooldown(1, 7200, commands.BucketType.user)
     async def crime(self, ctx):
+        async with self.bot.db.execute("SELECT wanted_level FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            wanted_level = row[0] if row else 0
+            
         async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Hacker Laptop'", (ctx.author.id,)) as cursor:
             row = await cursor.fetchone()
             laptop_count = row[0] if row else 0
             
-        success_chance = 0.6 + (0.05 * laptop_count) # +5% chance per laptop
-        
-        if random.random() < success_chance:
-            earnings = random.randint(300, 800) + (100 * laptop_count) # +$100 payout per laptop
-            await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
-            await self.bot.db.commit()
-            await self.log_transaction(ctx.author.id, "crime", earnings, "Crime success")
-            await ctx.send(f"🕵️ You successfully committed a crime and stole **${earnings}**!")
-        else:
-            fine = random.randint(100, 300)
-            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
-            await self.bot.db.commit()
-            await self.log_transaction(ctx.author.id, "crime", -fine, "Crime caught (fine)")
-            await ctx.send(f"🚓 You got caught! You paid a fine of **${fine}**.")
+        embed = discord.Embed(title="🕵️ Crime Syndicate", description="Choose your target. The bigger the score, the harder it is to pull off.", color=discord.Color.dark_purple())
+        if wanted_level > 0:
+            embed.add_field(name="Wanted Level", value=f"{'⭐' * wanted_level}\n*(Fines are increased by {wanted_level * 50}%!)*", inline=False)
+        if laptop_count > 0:
+            embed.add_field(name="Hacker Laptops", value=f"💻 You have {laptop_count} laptops boosting your success and payout!", inline=False)
+            
+        view = CrimeView(self, ctx.author, wanted_level, laptop_count)
+        await ctx.send(embed=embed, view=view)
 
     @commands.hybrid_command(description="Rob another user (Chance to fail).")
     @commands.cooldown(1, 3600, commands.BucketType.user)
@@ -444,6 +562,39 @@ class Economy(commands.Cog):
         await self.bot.db.execute("UPDATE users SET reputation = reputation + 1 WHERE user_id = ?", (target.id,))
         await self.bot.db.commit()
         await ctx.send(f"🌟 You gave +1 reputation to {target.mention}!")
+
+    @commands.hybrid_command(description="Use a consumable item from your inventory.")
+    async def use(self, ctx, item_name: str):
+        item_key = item_name.lower()
+        
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name COLLATE NOCASE = ?", (ctx.author.id, item_name)) as cursor:
+            row = await cursor.fetchone()
+            if not row or row[0] <= 0:
+                await ctx.send(f"❌ You don't have any **{item_name.title()}** in your inventory.")
+                return
+
+        if item_key in ["fake id", "lawyer"]:
+            async with self.bot.db.execute("SELECT wanted_level FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+                user_row = await cursor.fetchone()
+                wanted_level = user_row[0] if user_row else 0
+                
+            if wanted_level == 0:
+                await ctx.send("You don't have a Wanted Level to clear!")
+                return
+                
+            # Consume the item
+            await self.bot.db.execute("UPDATE inventory SET quantity = quantity - 1 WHERE user_id = ? AND item_name COLLATE NOCASE = ?", (ctx.author.id, item_name))
+            
+            # Clear wanted level
+            await self.bot.db.execute("UPDATE users SET wanted_level = 0 WHERE user_id = ?", (ctx.author.id,))
+            await self.bot.db.commit()
+            
+            flavor = "Your Fake ID successfully scrubbed you from the police database!" if item_key == "fake id" else "Your Lawyer successfully got all your charges dropped!"
+            embed = discord.Embed(title="🚓 Name Cleared!", description=f"You used a **{item_name.title()}**!\n\n{flavor}\n**Wanted Level is now ⭐ 0!**", color=discord.Color.green())
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(f"❌ **{item_name.title()}** is not a usable item.")
+
     @commands.hybrid_command(description="View the Richest Leaderboard.")
     async def richest(self, ctx, page: int = 1):
         if page < 1: page = 1
