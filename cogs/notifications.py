@@ -8,10 +8,14 @@ class Notifications(commands.Cog):
         self.bot = bot
         self.check_youtube.start()
         self.check_twitch.start()
+        self.check_kick.start()
+        self.check_tiktok.start()
 
     def cog_unload(self):
         self.check_youtube.cancel()
         self.check_twitch.cancel()
+        self.check_kick.cancel()
+        self.check_tiktok.cancel()
 
     @commands.hybrid_group(name="alerts", description="Setup automated notifications for content creators.")
     @commands.has_permissions(administrator=True)
@@ -273,6 +277,175 @@ class Notifications(commands.Cog):
                         
         except Exception as e:
             print(f"Error in twitch alert loop: {e}")
+
+    @notify_group.command(name="kick", description="Add a Kick streamer to post notifications for.")
+    @commands.has_permissions(administrator=True)
+    async def add_kick(self, ctx, kick_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
+        async with self.bot.db.execute("SELECT id FROM kick_alerts WHERE guild_id = ? AND kick_username = ?", (ctx.guild.id, kick_username.lower())) as cursor:
+            if await cursor.fetchone():
+                await ctx.send("❌ This Kick channel is already being monitored in this server!", ephemeral=True)
+                return
+
+        await self.bot.db.execute(
+            "INSERT INTO kick_alerts (guild_id, channel_id, kick_username, is_live, custom_message) VALUES (?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, kick_username.lower(), 0, custom_message)
+        )
+        await self.bot.db.commit()
+
+        embed = discord.Embed(title="✅ Kick Alerts Added", color=0x53FC18)
+        embed.description = f"Successfully set up notifications for `{kick_username}`!\nWhenever they go live, I'll post in {discord_channel.mention}."
+        await ctx.send(embed=embed)
+
+    @notify_group.command(name="remove_kick", description="Stop monitoring a Kick streamer.")
+    @commands.has_permissions(administrator=True)
+    async def remove_kick(self, ctx, kick_username: str):
+        await self.bot.db.execute("DELETE FROM kick_alerts WHERE guild_id = ? AND kick_username = ?", (ctx.guild.id, kick_username.lower()))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Removed `{kick_username}` from Kick alerts.")
+
+    @tasks.loop(minutes=3.0)
+    async def check_kick(self):
+        await self.bot.wait_until_ready()
+        try:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, kick_username, is_live, custom_message FROM kick_alerts") as cursor:
+                alerts = await cursor.fetchall()
+                
+            if not alerts: return
+            
+            async with aiohttp.ClientSession() as session:
+                for alert in alerts:
+                    db_id, guild_id, discord_channel_id, kick_username, db_is_live, custom_message = alert
+                    
+                    is_live_now = False
+                    try:
+                        async with session.get(f'https://kick.com/api/v1/channels/{kick_username}') as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if data.get('livestream'):
+                                    is_live_now = True
+                                    title = data['livestream']['session_title']
+                                    thumbnail_url = data['livestream']['thumbnail']['url']
+                                    game = data['livestream']['categories'][0]['name'] if data['livestream']['categories'] else "Kick Stream"
+                                    viewer_count = data['livestream']['viewer_count']
+                                    avatar_url = data['user']['profile_pic']
+                    except Exception as e:
+                        print(f"Kick check failed for {kick_username}: {e}")
+                        continue
+                        
+                    if is_live_now and not db_is_live:
+                        # WENT LIVE
+                        await self.bot.db.execute("UPDATE kick_alerts SET is_live = 1 WHERE id = ?", (db_id,))
+                        await self.bot.db.commit()
+                        
+                        channel = self.bot.get_channel(discord_channel_id)
+                        if channel:
+                            url = f"https://kick.com/{kick_username}"
+                            embed = discord.Embed(
+                                title=title, 
+                                url=url, 
+                                color=0x53FC18,
+                                timestamp=discord.utils.utcnow()
+                            )
+                            embed.set_author(name=f"{kick_username} is LIVE on Kick!", icon_url="https://cdn.iconscout.com/icon/free/png-256/free-kick-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png", url=url)
+                            if avatar_url: embed.set_thumbnail(url=avatar_url)
+                            embed.add_field(name="🎮 Playing", value=f"**{game}**", inline=True)
+                            embed.add_field(name="👥 Viewers", value=f"**{viewer_count}**", inline=True)
+                            if thumbnail_url:
+                                import random
+                                embed.set_image(url=f"{thumbnail_url}?r={random.randint(1,10000)}")
+                                
+                            embed.set_footer(text="Kick", icon_url="https://cdn.iconscout.com/icon/free/png-256/free-kick-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png")
+                                
+                            view = discord.ui.View()
+                            view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
+                            
+                            content = f"{custom_message}\n🟢 **{kick_username}** is live now!"
+                            await channel.send(content=content, embed=embed, view=view)
+                            
+                    elif not is_live_now and db_is_live:
+                        await self.bot.db.execute("UPDATE kick_alerts SET is_live = 0 WHERE id = ?", (db_id,))
+                        await self.bot.db.commit()
+        except Exception as e:
+            print(f"Error in kick alert loop: {e}")
+
+    @notify_group.command(name="tiktok", description="Add a TikTok streamer to post notifications for.")
+    @commands.has_permissions(administrator=True)
+    async def add_tiktok(self, ctx, tiktok_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
+        tiktok_username = tiktok_username.replace("@", "")
+        async with self.bot.db.execute("SELECT id FROM tiktok_alerts WHERE guild_id = ? AND tiktok_username = ?", (ctx.guild.id, tiktok_username.lower())) as cursor:
+            if await cursor.fetchone():
+                await ctx.send("❌ This TikTok channel is already being monitored in this server!", ephemeral=True)
+                return
+
+        await self.bot.db.execute(
+            "INSERT INTO tiktok_alerts (guild_id, channel_id, tiktok_username, is_live, custom_message) VALUES (?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, tiktok_username.lower(), 0, custom_message)
+        )
+        await self.bot.db.commit()
+
+        embed = discord.Embed(title="✅ TikTok Alerts Added", color=0x000000)
+        embed.description = f"Successfully set up notifications for `@{tiktok_username}`!\nWhenever they go live, I'll post in {discord_channel.mention}."
+        await ctx.send(embed=embed)
+
+    @notify_group.command(name="remove_tiktok", description="Stop monitoring a TikTok streamer.")
+    @commands.has_permissions(administrator=True)
+    async def remove_tiktok(self, ctx, tiktok_username: str):
+        tiktok_username = tiktok_username.replace("@", "")
+        await self.bot.db.execute("DELETE FROM tiktok_alerts WHERE guild_id = ? AND tiktok_username = ?", (ctx.guild.id, tiktok_username.lower()))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Removed `@{tiktok_username}` from TikTok alerts.")
+
+    @tasks.loop(minutes=3.0)
+    async def check_tiktok(self):
+        await self.bot.wait_until_ready()
+        try:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, tiktok_username, is_live, custom_message FROM tiktok_alerts") as cursor:
+                alerts = await cursor.fetchall()
+                
+            if not alerts: return
+            
+            async with aiohttp.ClientSession() as session:
+                for alert in alerts:
+                    db_id, guild_id, discord_channel_id, tiktok_username, db_is_live, custom_message = alert
+                    
+                    is_live_now = False
+                    try:
+                        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+                        async with session.get(f'https://www.tiktok.com/@{tiktok_username}/live', headers=headers) as resp:
+                            text = await resp.text()
+                            if '"status":2' in text or '"roomStatus":2' in text:
+                                is_live_now = True
+                    except Exception as e:
+                        print(f"TikTok check failed for {tiktok_username}: {e}")
+                        continue
+                        
+                    if is_live_now and not db_is_live:
+                        # WENT LIVE
+                        await self.bot.db.execute("UPDATE tiktok_alerts SET is_live = 1 WHERE id = ?", (db_id,))
+                        await self.bot.db.commit()
+                        
+                        channel = self.bot.get_channel(discord_channel_id)
+                        if channel:
+                            url = f"https://www.tiktok.com/@{tiktok_username}/live"
+                            embed = discord.Embed(
+                                title=f"@{tiktok_username} is Live on TikTok!", 
+                                url=url, 
+                                color=0x000000,
+                                timestamp=discord.utils.utcnow()
+                            )
+                            embed.set_author(name=f"@{tiktok_username} is LIVE on TikTok!", url=url)
+                                
+                            view = discord.ui.View()
+                            view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
+                            
+                            content = f"{custom_message}\n🎵 **@{tiktok_username}** is live now!"
+                            await channel.send(content=content, embed=embed, view=view)
+                            
+                    elif not is_live_now and db_is_live:
+                        await self.bot.db.execute("UPDATE tiktok_alerts SET is_live = 0 WHERE id = ?", (db_id,))
+                        await self.bot.db.commit()
+        except Exception as e:
+            print(f"Error in tiktok alert loop: {e}")
 
 async def setup(bot):
     await bot.add_cog(Notifications(bot))

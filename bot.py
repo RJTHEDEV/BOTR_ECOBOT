@@ -146,6 +146,28 @@ class BOTR(commands.Bot):
                 )
             ''')
             
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kick_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    channel_id INTEGER,
+                    kick_username TEXT,
+                    is_live INTEGER DEFAULT 0,
+                    custom_message TEXT
+                )
+            ''')
+            
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tiktok_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    channel_id INTEGER,
+                    tiktok_username TEXT,
+                    is_live INTEGER DEFAULT 0,
+                    custom_message TEXT
+                )
+            ''')
+            
             # YouTube Alerts Table
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS youtube_alerts (
