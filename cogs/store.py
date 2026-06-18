@@ -114,7 +114,10 @@ class Store(commands.Cog):
             ('Stock Tip', 50000, 'One exclusive insider stock tip', 'coins', 'Trading & Economy'),
             ('Gold Name Color', 100000, 'Paint your name gold in chat', 'coins', 'Cosmetics & Flex'),
             ('Diamond Badge', 20, 'Exclusive diamond badge next to your name', 'tickets', 'Cosmetics & Flex'),
-            ('Custom Command', 50, 'We will program a custom bot command for you', 'tickets', 'Cosmetics & Flex')
+            ('Custom Command', 50, 'We will program a custom bot command for you', 'tickets', 'Cosmetics & Flex'),
+            ('Iron Ore', 1000, 'A hard metal used for crafting heavy items.', 'coins', 'Crafting Materials'),
+            ('Wood', 500, 'Basic building material for crafting.', 'coins', 'Crafting Materials'),
+            ('Magic Dust', 1, 'Mystical dust required for advanced technology and safes.', 'tickets', 'Crafting Materials')
         ]
         
         added = 0
@@ -127,6 +130,50 @@ class Store(commands.Cog):
                 
         await self.bot.db.commit()
         await ctx.send(f"✅ Store populated with {added} new community items!")
+
+    @store_group.command(description="Craft special items using raw materials from the store.")
+    async def craft(self, ctx, recipe: str):
+        recipes = {
+            "mining rig": {"Iron Ore": 10, "Wood": 5},
+            "safe": {"Wood": 10, "Magic Dust": 5},
+            "hacker laptop": {"Iron Ore": 5, "Wood": 5, "Magic Dust": 10}
+        }
+        
+        recipe_key = recipe.lower()
+        if recipe_key not in recipes:
+            embed = discord.Embed(title="🛠️ Crafting Recipes", color=discord.Color.orange())
+            embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
+            embed.add_field(name="🖥️ Mining Rig", value="**Cost:** 10x Iron Ore, 5x Wood\n**Effect:** Generates $200 passive income every time you claim `/daily`.", inline=False)
+            embed.add_field(name="🔒 Safe", value="**Cost:** 10x Wood, 5x Magic Dust\n**Effect:** Protects your wallet! 80% chance to block robbers and fine them.", inline=False)
+            embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 5x Iron Ore, 5x Wood, 10x Magic Dust\n**Effect:** (Coming Soon) Boosts `/crime` payouts.", inline=False)
+            await ctx.send(embed=embed)
+            return
+
+        requirements = recipes[recipe_key]
+        
+        # Check inventory for requirements
+        async with self.bot.db.execute("SELECT item_name, quantity FROM inventory WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            inv = await cursor.fetchall()
+            inventory = {item: qty for item, qty in inv}
+
+        for req_item, req_qty in requirements.items():
+            if inventory.get(req_item, 0) < req_qty:
+                await ctx.send(f"❌ You don't have enough **{req_item}**. You need {req_qty}, but you only have {inventory.get(req_item, 0)}.")
+                return
+
+        # Deduct items
+        for req_item, req_qty in requirements.items():
+            await self.bot.db.execute("UPDATE inventory SET quantity = quantity - ? WHERE user_id = ? AND item_name = ?", (req_qty, ctx.author.id, req_item))
+            
+        # Grant crafted item
+        crafted_item = recipe_key.title()
+        if inventory.get(crafted_item, 0) > 0:
+            await self.bot.db.execute("UPDATE inventory SET quantity = quantity + 1 WHERE user_id = ? AND item_name = ?", (ctx.author.id, crafted_item))
+        else:
+            await self.bot.db.execute("INSERT INTO inventory (user_id, item_name, quantity) VALUES (?, ?, 1)", (ctx.author.id, crafted_item))
+            
+        await self.bot.db.commit()
+        await ctx.send(f"🎉 **CRAFTING SUCCESS!** You constructed a **{crafted_item}**! It is now active in your inventory.")
 
 class ItemBuySelect(discord.ui.Select):
     def __init__(self, bot, category_items):
