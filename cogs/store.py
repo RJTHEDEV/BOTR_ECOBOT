@@ -117,7 +117,10 @@ class Store(commands.Cog):
             ('Custom Command', 50, 'We will program a custom bot command for you', 'tickets', 'Cosmetics & Flex'),
             ('Iron Ore', 1000, 'A hard metal used for crafting heavy items.', 'coins', 'Crafting Materials'),
             ('Wood', 500, 'Basic building material for crafting.', 'coins', 'Crafting Materials'),
-            ('Magic Dust', 1, 'Mystical dust required for advanced technology and safes.', 'tickets', 'Crafting Materials')
+            ('Magic Dust', 1, 'Mystical dust required for advanced technology and safes.', 'tickets', 'Crafting Materials'),
+            ('Silicon Chip', 5000, 'Advanced electronics for high-tier crafting.', 'coins', 'Crafting Materials'),
+            ('Gold Bar', 3, 'Extremely valuable metal used in premium recipes.', 'tickets', 'Crafting Materials'),
+            ('Copper Wire', 1500, 'Conductive material for electronics.', 'coins', 'Crafting Materials')
         ]
         
         added = 0
@@ -136,7 +139,10 @@ class Store(commands.Cog):
         recipes = {
             "mining rig": {"Iron Ore": 10, "Wood": 5},
             "safe": {"Wood": 10, "Magic Dust": 5},
-            "hacker laptop": {"Iron Ore": 5, "Wood": 5, "Magic Dust": 10}
+            "hacker laptop": {"Silicon Chip": 2, "Wood": 5, "Copper Wire": 10},
+            "server rack": {"Silicon Chip": 20, "Copper Wire": 50, "Iron Ore": 10},
+            "insider bot": {"Silicon Chip": 10, "Gold Bar": 5},
+            "lockpick set": {"Iron Ore": 5, "Copper Wire": 2}
         }
         
         recipe_key = recipe.lower()
@@ -145,7 +151,10 @@ class Store(commands.Cog):
             embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
             embed.add_field(name="🖥️ Mining Rig", value="**Cost:** 10x Iron Ore, 5x Wood\n**Effect:** Generates $200 passive income every time you claim `/daily`.", inline=False)
             embed.add_field(name="🔒 Safe", value="**Cost:** 10x Wood, 5x Magic Dust\n**Effect:** Protects your wallet! 80% chance to block robbers and fine them.", inline=False)
-            embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 5x Iron Ore, 5x Wood, 10x Magic Dust\n**Effect:** (Coming Soon) Boosts `/crime` payouts.", inline=False)
+            embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 2x Silicon Chip, 5x Wood, 10x Copper Wire\n**Effect:** Increases `/crime` success chance by 5% and payout by $100 per laptop.", inline=False)
+            embed.add_field(name="🗄️ Server Rack", value="**Cost:** 20x Silicon Chip, 50x Copper Wire, 10x Iron Ore\n**Effect:** Generates $1,000 passive income every time you claim `/daily`.", inline=False)
+            embed.add_field(name="🤖 Insider Bot", value="**Cost:** 10x Silicon Chip, 5x Gold Bar\n**Effect:** Generates 1 Ticket (🎟️) every time you claim `/daily`.", inline=False)
+            embed.add_field(name="🔓 Lockpick Set", value="**Cost:** 5x Iron Ore, 2x Copper Wire\n**Effect:** Automatically bypasses a victim's Safe when you `/rob` them. (Consumed on use).", inline=False)
             await ctx.send(embed=embed)
             return
 

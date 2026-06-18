@@ -165,20 +165,26 @@ class Economy(commands.Cog):
                 # Let's cap bonus at 7 days
                 effective_streak = min(streak, 7)
                 
-                # Check for Mining Rig (Passive Income)
+                # Check for Crafted Items (Passive Income)
                 rig_bonus = 0
-                async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Mining Rig'", (ctx.author.id,)) as cursor:
-                    row = await cursor.fetchone()
-                    if row and row[0] > 0:
-                        rig_bonus = 200 * row[0] # $200 per rig
+                server_bonus = 0
+                ticket_bonus = 0
+                
+                async with self.bot.db.execute("SELECT item_name, quantity FROM inventory WHERE user_id = ?", (ctx.author.id,)) as cursor:
+                    inv = await cursor.fetchall()
+                    inventory = {item: qty for item, qty in inv}
+                    
+                rig_bonus = 200 * inventory.get('Mining Rig', 0)
+                server_bonus = 1000 * inventory.get('Server Rack', 0)
+                ticket_bonus = 1 * inventory.get('Insider Bot', 0)
 
                 base_amount = 500
                 level_bonus = level * 50
                 streak_bonus = effective_streak * 50
-                total_amount = base_amount + level_bonus + streak_bonus + rig_bonus
+                total_amount = base_amount + level_bonus + streak_bonus + rig_bonus + server_bonus
                 
-                await self.bot.db.execute("UPDATE users SET balance = balance + ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
-                                          (total_amount, today, streak, ctx.author.id))
+                await self.bot.db.execute("UPDATE users SET balance = balance + ?, tickets = tickets + ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
+                                          (total_amount, ticket_bonus, today, streak, ctx.author.id))
                 await self.log_transaction(ctx.author.id, "daily", total_amount, f"Daily reward (Streak: {streak})")
         
         await self.bot.db.commit()
@@ -187,8 +193,14 @@ class Economy(commands.Cog):
         embed.add_field(name="Base", value="$500", inline=True)
         embed.add_field(name="Level Bonus", value=f"${level_bonus}", inline=True)
         embed.add_field(name="Streak Bonus", value=f"${streak_bonus} (Day {streak} 🔥)", inline=True)
+        
         if rig_bonus > 0:
-            embed.add_field(name="Mining Rig", value=f"${rig_bonus} 🖥️", inline=True)
+            embed.add_field(name="Mining Rigs", value=f"${rig_bonus} 🖥️", inline=True)
+        if server_bonus > 0:
+            embed.add_field(name="Server Racks", value=f"${server_bonus} 🗄️", inline=True)
+        if ticket_bonus > 0:
+            embed.add_field(name="Insider Bots", value=f"🎟️ {ticket_bonus}", inline=True)
+            
         embed.add_field(name="Total", value=f"**${total_amount}**", inline=False)
         
         await ctx.send(embed=embed)
@@ -350,8 +362,14 @@ class Economy(commands.Cog):
     @commands.hybrid_command(description="Commit a crime (High risk/reward) (2h cooldown).")
     @commands.cooldown(1, 7200, commands.BucketType.user)
     async def crime(self, ctx):
-        if random.random() < 0.6: # 60% success
-            earnings = random.randint(300, 800)
+        async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Hacker Laptop'", (ctx.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            laptop_count = row[0] if row else 0
+            
+        success_chance = 0.6 + (0.05 * laptop_count) # +5% chance per laptop
+        
+        if random.random() < success_chance:
+            earnings = random.randint(300, 800) + (100 * laptop_count) # +$100 payout per laptop
             await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, ctx.author.id))
             await self.bot.db.commit()
             await self.log_transaction(ctx.author.id, "crime", earnings, "Crime success")
@@ -381,16 +399,24 @@ class Economy(commands.Cog):
         # Check for Safe
         async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Safe'", (target.id,)) as cursor:
             row = await cursor.fetchone()
-            if row and row[0] > 0:
-                # Safe protects 50% of balance or increases fail chance?
-                # Let's make it increase fail chance drastically (80% fail)
-                if random.random() < 0.8:
-                    fine = random.randint(200, 1000)
-                    await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
-                    await self.bot.db.commit()
-                    await self.log_transaction(ctx.author.id, "rob", -fine, "Robbery failed (Safe Alarm)")
-                    await ctx.send(f"🔒 **Safe Protected!** You triggered the alarm and paid a **${fine}** fine.")
-                    return
+            has_safe = row and row[0] > 0
+            
+        if has_safe:
+            async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Lockpick Set'", (ctx.author.id,)) as cursor:
+                row = await cursor.fetchone()
+                has_lockpick = row and row[0] > 0
+                
+            if has_lockpick:
+                await ctx.send("🔓 **Lockpick Used!** You silently bypassed their Safe!")
+                await self.bot.db.execute("UPDATE inventory SET quantity = quantity - 1 WHERE user_id = ? AND item_name = 'Lockpick Set'", (ctx.author.id,))
+                await self.bot.db.commit()
+            elif random.random() < 0.8: # 80% fail if Safe
+                fine = random.randint(200, 1000)
+                await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+                await self.bot.db.commit()
+                await self.log_transaction(ctx.author.id, "rob", -fine, "Robbery failed (Safe Alarm)")
+                await ctx.send(f"🔒 **Safe Protected!** You triggered the alarm and paid a **${fine}** fine.")
+                return
 
         if random.random() < 0.4: # 40% success
             steal_amount = random.randint(int(target_bal * 0.1), int(target_bal * 0.5))
