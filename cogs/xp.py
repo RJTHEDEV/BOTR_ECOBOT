@@ -101,9 +101,19 @@ class XP(commands.Cog):
             await self.bot.db.commit()
             
             # Announce Level Up
+            reward_coins = new_level * 500
+            reward_tickets = 1 if new_level % 5 == 0 else 0
+            
+            await self.bot.db.execute("UPDATE users SET balance = balance + ?, tickets = tickets + ? WHERE user_id = ?", (reward_coins, reward_tickets, user.id))
+            await self.bot.db.commit()
+            
             try:
-                msg = random.choice(LEVEL_UP_MESSAGES).format(user=user.mention, level=new_level)
-                await user.send(msg)
+                ticket_msg = f" and 🎟️ **{reward_tickets} Ticket(s)**" if reward_tickets > 0 else ""
+                base_msg = random.choice(LEVEL_UP_MESSAGES).format(user=user.mention, level=new_level)
+                msg = f"{base_msg}\n\nYou've been awarded **${reward_coins}**{ticket_msg}!"
+                
+                embed = discord.Embed(title="🆙 Level Up!", description=msg, color=discord.Color.blue())
+                await user.send(embed=embed)
             except:
                 pass
 
@@ -139,34 +149,7 @@ class XP(commands.Cog):
         embed.add_field(name="📊 Level", value=f"{level} (XP: {xp})", inline=True)
         
         await ctx.send(embed=embed)
-    @commands.hybrid_command(description="View the XP Leaderboard.")
-    async def leaderboard(self, ctx, page: int = 1):
-        if page < 1: page = 1
-        per_page = 10
-        offset = (page - 1) * per_page
-        
-        async with self.bot.db.execute("SELECT COUNT(*) FROM users") as cursor:
-            total_users = (await cursor.fetchone())[0]
-            
-        total_pages = (total_users + per_page - 1) // per_page
-        if not total_pages: total_pages = 1
-        
-        if page > total_pages:
-            await ctx.send(f"Page {page} does not exist. Total pages: {total_pages}")
-            return
 
-        async with self.bot.db.execute("SELECT user_id, xp, level FROM users ORDER BY xp DESC LIMIT ? OFFSET ?", (per_page, offset)) as cursor:
-            rows = await cursor.fetchall()
-        
-        embed = discord.Embed(title="🏆 XP Leaderboard", color=discord.Color.gold())
-        for i, (user_id, xp, level) in enumerate(rows, 1):
-            rank = offset + i
-            user = ctx.guild.get_member(user_id)
-            name = user.display_name if user else f"User {user_id}"
-            embed.add_field(name=f"#{rank} {name}", value=f"Level {level} | {xp} XP", inline=False)
-        
-        embed.set_footer(text=f"Page {page}/{total_pages} | Use !leaderboard <page>")
-        await ctx.send(embed=embed)
     @commands.hybrid_command(description="Compare your stats with another user.")
     async def compare(self, ctx, target: discord.Member):
         if target.bot:

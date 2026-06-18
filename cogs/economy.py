@@ -238,51 +238,6 @@ class Economy(commands.Cog):
     def cog_unload(self):
         self.bank_interest_task.cancel()
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author.bot or not message.guild:
-            return
-
-        now = time.time()
-        # 60 second cooldown per user for XP
-        if message.author.id in self.last_xp_time:
-            if now - self.last_xp_time[message.author.id] < 60:
-                return
-                
-        self.last_xp_time[message.author.id] = now
-        xp_gain = random.randint(15, 25)
-        
-        async with self.bot.db.execute("SELECT xp, level FROM users WHERE user_id = ?", (message.author.id,)) as cursor:
-            row = await cursor.fetchone()
-            
-        if not row:
-            await self.bot.db.execute("INSERT INTO users (user_id, xp, level) VALUES (?, ?, 1)", (message.author.id, xp_gain))
-            await self.bot.db.commit()
-            return
-            
-        current_xp, current_level = row
-        new_xp = current_xp + xp_gain
-        
-        # Level up formula: level * 100
-        xp_needed = current_level * 100
-        
-        if new_xp >= xp_needed:
-            new_level = current_level + 1
-            new_xp = new_xp - xp_needed
-            reward_coins = new_level * 500
-            reward_tickets = 1 if new_level % 5 == 0 else 0
-            
-            await self.bot.db.execute("UPDATE users SET xp = ?, level = ?, balance = balance + ?, tickets = tickets + ? WHERE user_id = ?", 
-                                     (new_xp, new_level, reward_coins, reward_tickets, message.author.id))
-            await self.bot.db.commit()
-            
-            ticket_msg = f" and 🎟️ **{reward_tickets} Ticket(s)**" if reward_tickets > 0 else ""
-            embed = discord.Embed(title="🆙 Level Up!", description=f"Congratulations {message.author.mention}! You've reached **Level {new_level}**!\n\nYou've been awarded **${reward_coins}**{ticket_msg}!", color=discord.Color.blue())
-            await message.channel.send(embed=embed)
-        else:
-            await self.bot.db.execute("UPDATE users SET xp = ? WHERE user_id = ?", (new_xp, message.author.id))
-            await self.bot.db.commit()
-
     @tasks.loop(hours=24)
     async def bank_interest_task(self):
         # 1% daily interest for bank balances over 0
