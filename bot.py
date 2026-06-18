@@ -549,10 +549,38 @@ class BOTR(commands.Bot):
                     PRIMARY KEY (message_id, user_id)
                 )
             ''')
-            # Pets Table
+            # Pets Table Migration for multiple pets
+            try:
+                # Check if it's the old schema (no 'id' column)
+                await cursor.execute("SELECT id FROM pets LIMIT 1")
+            except:
+                try:
+                    # It's the old schema, migrate it
+                    await cursor.execute("ALTER TABLE pets RENAME TO pets_old")
+                    await cursor.execute('''
+                        CREATE TABLE pets (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER,
+                            pet_type TEXT,
+                            name TEXT,
+                            level INTEGER DEFAULT 1,
+                            xp INTEGER DEFAULT 0,
+                            last_fed TEXT
+                        )
+                    ''')
+                    await cursor.execute('''
+                        INSERT INTO pets (user_id, pet_type, name, level, xp, last_fed)
+                        SELECT user_id, pet_type, name, level, xp, last_fed FROM pets_old
+                    ''')
+                    await cursor.execute("DROP TABLE pets_old")
+                except Exception as e:
+                    print(f"Failed to migrate pets table: {e}")
+
+            # Ensure table exists if fresh start
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS pets (
-                    user_id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
                     pet_type TEXT,
                     name TEXT,
                     level INTEGER DEFAULT 1,

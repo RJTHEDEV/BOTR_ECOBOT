@@ -55,9 +55,9 @@ class Pets(commands.Cog):
             await ctx.send("Invalid pet type. Use `/pet shop`.")
             return
             
-        async with self.bot.db.execute("SELECT pet_type FROM pets WHERE user_id = ?", (ctx.author.id,)) as cursor:
+        async with self.bot.db.execute("SELECT pet_type FROM pets WHERE user_id = ? AND pet_type = ?", (ctx.author.id, pet_type)) as cursor:
             if await cursor.fetchone():
-                await ctx.send("You already have a pet! You must abandon it first (feature coming soon).")
+                await ctx.send(f"You already own a {pet_type.title()}! You can adopt a different type of pet to stack their buffs.")
                 return
                 
         price = PET_TYPES[pet_type]["price"]
@@ -76,48 +76,50 @@ class Pets(commands.Cog):
         
         await ctx.send(f"🎉 Congratulations! You adopted a {PET_TYPES[pet_type]['emoji']} **{pet_type.title()}** named **{name}**!")
 
-    @pet.command(name="info", description="Check your pet's status.")
+    @pet.command(name="info", description="Check your pets' status.")
     async def info(self, ctx):
         async with self.bot.db.execute("SELECT pet_type, name, level, xp, last_fed FROM pets WHERE user_id = ?", (ctx.author.id,)) as cursor:
-            row = await cursor.fetchone()
+            rows = await cursor.fetchall()
             
-        if not row:
-            await ctx.send("You don't own a pet. Use `/pet shop`.")
+        if not rows:
+            await ctx.send("You don't own any pets. Use `/pet shop`.")
             return
             
-        p_type, name, level, xp, last_fed = row
-        emoji = PET_TYPES[p_type]["emoji"]
-        buff = PET_TYPES[p_type]["buff_desc"]
-        
-        # Calculate hunger
-        last_fed_dt = datetime.datetime.fromisoformat(last_fed)
-        hours_since_fed = (datetime.datetime.now() - last_fed_dt).total_seconds() / 3600
-        hunger = max(0, 100 - int(hours_since_fed * 5)) # Lose 5% hunger per hour
-        
-        embed = discord.Embed(title=f"{emoji} {name}'s Status", color=discord.Color.blue())
-        embed.add_field(name="Type", value=p_type.title(), inline=True)
-        embed.add_field(name="Level", value=f"{level} (XP: {xp})", inline=True)
-        embed.add_field(name="Hunger (Fullness)", value=f"{hunger}%", inline=True)
-        embed.add_field(name="Active Buff", value=buff if hunger > 20 else "⚠️ Too hungry to buff! Feed them!", inline=False)
-        embed.set_footer(text=f"Loves to eat: {PET_TYPES[p_type]['favorite_food'].title()}")
-        
+        embed = discord.Embed(title=f"🐾 {ctx.author.name}'s Pets", color=discord.Color.blue())
+        for p_type, name, level, xp, last_fed in rows:
+            emoji = PET_TYPES[p_type]["emoji"]
+            buff = PET_TYPES[p_type]["buff_desc"]
+            
+            last_fed_dt = datetime.datetime.fromisoformat(last_fed)
+            hours_since_fed = (datetime.datetime.now() - last_fed_dt).total_seconds() / 3600
+            hunger = max(0, 100 - int(hours_since_fed * 5))
+            
+            status = buff if hunger > 20 else "⚠️ Too hungry to buff! Feed them!"
+            embed.add_field(name=f"{emoji} {name} (Lvl {level} | XP: {xp} | Full: {hunger}%)", value=f"**Type:** {p_type.title()} | **Loves:** {PET_TYPES[p_type]['favorite_food'].title()}\n**Active Buff:** {status}", inline=False)
+            
         await ctx.send(embed=embed)
 
-    @pet.command(name="feed", description="Feed your pet specific food to restore its hunger.")
-    @discord.app_commands.autocomplete(food_name=food_autocomplete)
-    async def feed(self, ctx, food_name: str):
+    async def pet_name_autocomplete(self, interaction: discord.Interaction, current: str) -> list[discord.app_commands.Choice[str]]:
+        async with self.bot.db.execute("SELECT name FROM pets WHERE user_id = ?", (interaction.user.id,)) as cursor:
+            rows = await cursor.fetchall()
+        choices = [discord.app_commands.Choice(name=r[0], value=r[0]) for r in rows if current.lower() in r[0].lower()]
+        return choices[:25]
+
+    @pet.command(name="feed", description="Feed a specific pet to restore its hunger.")
+    @discord.app_commands.autocomplete(pet_name=pet_name_autocomplete, food_name=food_autocomplete)
+    async def feed(self, ctx, pet_name: str, food_name: str):
         food_name = food_name.lower()
         if food_name not in FOOD_TYPES:
             await ctx.send("Invalid food type. Check the autocomplete menu!")
             return
 
-        async with self.bot.db.execute("SELECT pet_type, last_fed FROM pets WHERE user_id = ?", (ctx.author.id,)) as cursor:
+        async with self.bot.db.execute("SELECT id, pet_type, last_fed FROM pets WHERE user_id = ? AND name = ?", (ctx.author.id, pet_name)) as cursor:
             row = await cursor.fetchone()
             if not row:
-                await ctx.send("You don't own a pet.")
+                await ctx.send(f"You don't own a pet named **{pet_name}**.")
                 return
                 
-        p_type, last_fed = row
+        pid, p_type, last_fed = row
         food = FOOD_TYPES[food_name]
         
         async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
@@ -150,11 +152,11 @@ class Pets(commands.Cog):
         new_hours_since_fed = (100 - new_hunger) / 5.0
         new_last_fed_dt = datetime.datetime.now() - datetime.timedelta(hours=new_hours_since_fed)
         
-        await self.bot.db.execute("UPDATE pets SET last_fed = ? WHERE user_id = ?", (new_last_fed_dt.isoformat(), ctx.author.id))
+        await self.bot.db.execute("UPDATE pets SET last_fed = ? WHERE id = ?", (new_last_fed_dt.isoformat(), pid))
         await self.bot.db.commit()
         
         embed = discord.Embed(title=f"{food['emoji']} Feeding Time!", color=discord.Color.green())
-        embed.description = f"You bought a **{food_name.title()}** for **${food['cost']:,}** and fed it to your pet!"
+        embed.description = f"You bought a **{food_name.title()}** for **${food['cost']:,}** and fed it to **{pet_name}**!"
         
         if is_favorite:
             embed.description += "\n\n💖 **It's their favorite food!** The food restored DOUBLE hunger!"
@@ -169,44 +171,49 @@ class Pets(commands.Cog):
         
         if cmd in ["work", "beg", "search", "crime", "rob"]:
             # Check for pet buff
-            async with self.bot.db.execute("SELECT pet_type, level, last_fed FROM pets WHERE user_id = ?", (ctx.author.id,)) as cursor:
-                row = await cursor.fetchone()
+            async with self.bot.db.execute("SELECT id, pet_type, level, last_fed FROM pets WHERE user_id = ?", (ctx.author.id,)) as cursor:
+                rows = await cursor.fetchall()
                 
-            if not row: return
-            p_type, level, last_fed = row
+            if not rows: return
             
-            # Check hunger
-            last_fed_dt = datetime.datetime.fromisoformat(last_fed)
-            if (datetime.datetime.now() - last_fed_dt).total_seconds() / 3600 > 16:
-                return # Too hungry (under 20%)
-                
-            bonus = 0
-            if p_type == "dog" and cmd in ["work", "beg"]:
-                bonus = random.randint(10, 50) + (level * 2)
-            elif p_type == "dragon":
-                bonus = random.randint(20, 100) + (level * 5)
-            elif p_type == "parrot" and random.random() < 0.2:
-                bonus = random.randint(5, 30) * level
-                
-            if bonus > 0:
-                await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (bonus, ctx.author.id))
-                
-                # Give pet XP
-                await self.bot.db.execute("UPDATE pets SET xp = xp + 1 WHERE user_id = ?", (ctx.author.id,))
-                
-                # Check level up (every 10 xp)
-                async with self.bot.db.execute("SELECT xp FROM pets WHERE user_id = ?", (ctx.author.id,)) as c2:
-                    xp = (await c2.fetchone())[0]
-                    if xp >= level * 10:
-                        await self.bot.db.execute("UPDATE pets SET level = level + 1, xp = 0 WHERE user_id = ?", (ctx.author.id,))
-                        try:
-                            await ctx.author.send(f"🎉 Your pet leveled up to Level {level+1}!")
-                        except: pass
+            total_bonus = 0
+            leveled_up = []
+            
+            for pid, p_type, level, last_fed in rows:
+                last_fed_dt = datetime.datetime.fromisoformat(last_fed)
+                if (datetime.datetime.now() - last_fed_dt).total_seconds() / 3600 > 16:
+                    continue # Too hungry
+                    
+                bonus = 0
+                if p_type == "dog" and cmd in ["work", "beg"]:
+                    bonus = random.randint(10, 50) + (level * 2)
+                elif p_type == "dragon":
+                    bonus = random.randint(20, 100) + (level * 5)
+                elif p_type == "parrot" and random.random() < 0.2:
+                    bonus = random.randint(5, 30) * level
+                    
+                if bonus > 0:
+                    total_bonus += bonus
+                    # Give pet XP
+                    await self.bot.db.execute("UPDATE pets SET xp = xp + 1 WHERE id = ?", (pid,))
+                    # Check level up
+                    async with self.bot.db.execute("SELECT xp FROM pets WHERE id = ?", (pid,)) as c2:
+                        xp = (await c2.fetchone())[0]
+                        if xp >= level * 10:
+                            await self.bot.db.execute("UPDATE pets SET level = level + 1, xp = 0 WHERE id = ?", (pid,))
+                            leveled_up.append(p_type)
 
+            if total_bonus > 0:
+                await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (total_bonus, ctx.author.id))
                 await self.bot.db.commit()
-                
                 try:
-                    await ctx.send(f"{PET_TYPES[p_type]['emoji']} Your pet found an extra **${bonus:,}** for you!", delete_after=5)
+                    if len(rows) > 1:
+                        await ctx.send(f"🐾 Your pets combined found an extra **${total_bonus:,}** for you!", delete_after=5)
+                    else:
+                        await ctx.send(f"🐾 Your pet found an extra **${total_bonus:,}** for you!", delete_after=5)
+                        
+                    for pt in leveled_up:
+                        await ctx.author.send(f"🎉 Your {PET_TYPES[pt]['emoji']} {pt.title()} leveled up!")
                 except: pass
 
 async def setup(bot):
