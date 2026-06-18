@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+    }
+
+    th {
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        padding: 1rem;
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    td {
+        padding: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        transition: background 0.2s ease;
+    }
+
+    tr:hover td {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    tr:last-child td {
+        border-bottom: none;
+    }
+
+    .rank-badge {
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        line-height: 32px;
+        text-align: center;
+        border-radius: 50%;
+        font-weight: 800;
+        background: var(--glass-border);
+    }
+
+    .rank-1 { background: linear-gradient(135deg, #fbbf24, #d97706); color: #fff; box-shadow: 0 0 10px rgba(251, 191, 36, 0.5); }
+    .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; }
+    .rank-3 { background: linear-gradient(135deg, #fcd34d, #b45309); color: #fff; }
+
+    .currency {
+        font-family: monospace;
+        font-size: 1.1rem;
+        color: #10b981;
+    }
+</style>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>User ID</th>
+                <th>Wallet</th>
+                <th>Bank</th>
+                <th>Net Worth</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>
+                    <span class="rank-badge 
+                        {% if loop.index == 1 %}rank-1
+                        {% elif loop.index == 2 %}rank-2
+                        {% elif loop.index == 3 %}rank-3
+                        {% endif %}">
+                        {{ loop.index }}
+                    </span>
+                </td>
+                <td style="font-weight: 600;">{{ user.user_id }}</td>
+                <td class="currency">${{ "{:,}".format(user.balance) }}</td>
+                <td class="currency">${{ "{:,}".format(user.bank) }}</td>
+                <td class="currency" style="font-weight: 800;">${{ "{:,}".format(user.net_worth) }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                    No economy data found. Start earning in the server!
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

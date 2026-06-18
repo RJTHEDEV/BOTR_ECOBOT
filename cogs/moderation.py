@@ -124,6 +124,75 @@ class Moderation(commands.Cog):
             except Exception as e:
                 await ctx.send(f"⚠️ Failed to apply automated mute: {e}")
 
+    @commands.hybrid_command(description="Clear multiple messages.")
+    @commands.has_permissions(manage_messages=True)
+    async def purge(self, ctx, amount: int):
+        if amount <= 0 or amount > 1000:
+            await ctx.send("Amount must be between 1 and 1000.")
+            return
+        
+        await ctx.defer(ephemeral=True)
+        # Using interaction check to not delete interaction message twice if invoked via slash
+        deleted = await ctx.channel.purge(limit=amount + (1 if not ctx.interaction else 0))
+        
+        embed = discord.Embed(description=f"**Purged {len(deleted)} messages.**", color=discord.Color.green())
+        msg = await ctx.send(embed=embed)
+        if not ctx.interaction:
+            await msg.delete(delay=5)
+        await self.log_mod_action(ctx.guild, embed)
+
+    @commands.hybrid_command(description="Set channel slowmode.")
+    @commands.has_permissions(manage_channels=True)
+    async def slowmode(self, ctx, seconds: int):
+        await ctx.channel.edit(slowmode_delay=seconds)
+        embed = discord.Embed(description=f"**Slowmode set to {seconds} seconds.**", color=discord.Color.green())
+        await ctx.send(embed=embed)
+        await self.log_mod_action(ctx.guild, embed)
+
+    @commands.hybrid_command(description="Softban a user (ban and unban to clear messages).")
+    @commands.has_permissions(ban_members=True)
+    async def softban(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
+        if member.top_role >= ctx.author.top_role:
+            await ctx.send("You cannot softban this user.")
+            return
+
+        await member.ban(reason=f"Softban: {reason}", delete_message_days=1)
+        await member.unban(reason="Softban release")
+        await self.add_infraction(ctx.guild.id, member.id, ctx.author.id, "Softban", reason)
+
+        embed = discord.Embed(description=f"**{member.mention} was softbanned.**", color=discord.Color.orange())
+        embed.add_field(name="Reason", value=reason)
+        embed.set_footer(text=f"Mod: {ctx.author}")
+        await ctx.send(embed=embed)
+        await self.log_mod_action(ctx.guild, embed)
+
+    @commands.hybrid_command(description="Unban a user by ID.")
+    @commands.has_permissions(ban_members=True)
+    async def unban(self, ctx, user_id: str, *, reason: str = "No reason provided"):
+        try:
+            user = await self.bot.fetch_user(int(user_id))
+            await ctx.guild.unban(user, reason=reason)
+            embed = discord.Embed(description=f"**{user.mention} was unbanned.**", color=discord.Color.green())
+            await ctx.send(embed=embed)
+            await self.log_mod_action(ctx.guild, embed)
+        except discord.NotFound:
+            await ctx.send("User not found or not banned.")
+        except ValueError:
+            await ctx.send("Invalid user ID.")
+
+    @commands.hybrid_command(description="Change a user's nickname.")
+    @commands.has_permissions(manage_nicknames=True)
+    async def nick(self, ctx, member: discord.Member, *, nickname: str = None):
+        if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+            await ctx.send("You cannot change this user's nickname.")
+            return
+            
+        await member.edit(nick=nickname)
+        action = f"changed to {nickname}" if nickname else "reset"
+        embed = discord.Embed(description=f"**{member.mention}'s nickname was {action}.**", color=discord.Color.green())
+        await ctx.send(embed=embed)
+        await self.log_mod_action(ctx.guild, embed)
+
     @commands.hybrid_command(description="Lockdown the current channel.")
     @commands.has_permissions(manage_channels=True)
     async def lockdown(self, ctx):

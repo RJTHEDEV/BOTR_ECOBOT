@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+    }
+
+    th {
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        padding: 1rem;
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    td {
+        padding: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        transition: background 0.2s ease;
+    }
+
+    tr:hover td {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    tr:last-child td {
+        border-bottom: none;
+    }
+
+    .rank-badge {
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        line-height: 32px;
+        text-align: center;
+        border-radius: 50%;
+        font-weight: 800;
+        background: var(--glass-border);
+    }
+
+    .rank-1 { background: linear-gradient(135deg, #8b5cf6, #3b82f6); color: #fff; box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); }
+    
+    .clan-name {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: var(--text-main);
+    }
+
+    .level-badge {
+        background: rgba(139, 92, 246, 0.2);
+        color: #c4b5fd;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 800;
+        border: 1px solid rgba(139, 92, 246, 0.3);
+    }
+
+    .currency {
+        font-family: monospace;
+        font-size: 1.1rem;
+        color: #10b981;
+    }
+</style>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Clan Name</th>
+                <th>Owner ID</th>
+                <th>Level</th>
+                <th>Clan Bank</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for clan in clans %}
+            <tr>
+                <td>
+                    <span class="rank-badge {% if loop.index == 1 %}rank-1{% endif %}">
+                        {{ loop.index }}
+                    </span>
+                </td>
+                <td class="clan-name">🛡️ {{ clan.name }}</td>
+                <td style="color: var(--text-muted);">{{ clan.owner_id }}</td>
+                <td><span class="level-badge">Lvl {{ clan.level }}</span></td>
+                <td class="currency" style="font-weight: 800;">${{ "{:,}".format(clan.bank) }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                    No clans found. Start a clan in the server!
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

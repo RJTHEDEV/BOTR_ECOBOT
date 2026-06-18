@@ -199,7 +199,13 @@ class Streamers(commands.Cog):
             view = discord.ui.View()
             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=stream_url))
             
-            await channel.send(content=f"@everyone {msg_content}", embed=embed, view=view)
+            # Fetch subs
+            async with self.bot.db.execute("SELECT user_id FROM streamer_subs WHERE streamer_name = ? AND platform = ?", (username.lower(), platform.lower())) as cursor:
+                subs = await cursor.fetchall()
+            
+            mentions = " ".join([f"<@{sub[0]}>" for sub in subs])
+            msg_prefix = f"{mentions}\n" if mentions else ""
+            await channel.send(content=f"{msg_prefix}{msg_content}", embed=embed, view=view)
         
         else: # Going Offline
             msg_content = random.choice(self.offline_messages).format(username=username)
@@ -364,6 +370,120 @@ class Streamers(commands.Cog):
             await ctx.send(f"✅ Sent **Go Offline** test for {username} on {platform}.", delete_after=5)
         else:
             await ctx.send("❌ Invalid action. Use `live` or `offline`.")
+
+    @commands.Cog.listener()
+    async def on_presence_update(self, before, after):
+        # Auto Live Role
+        if not after.guild: return
+        
+        async with self.bot.db.execute("SELECT role_id FROM live_roles WHERE guild_id = ?", (after.guild.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row: return
+            live_role = after.guild.get_role(row[0])
+            if not live_role: return
+
+        was_streaming = any(isinstance(a, discord.Streaming) for a in before.activities) if before else False
+        is_streaming = any(isinstance(a, discord.Streaming) for a in after.activities) if after else False
+
+        if is_streaming and not was_streaming:
+            try: await after.add_roles(live_role, reason="Auto Live Role")
+            except: pass
+        elif not is_streaming and was_streaming:
+            try: await after.remove_roles(live_role, reason="Auto Live Role")
+            except: pass
+
+    @commands.hybrid_command(description="Set the auto-live role.")
+    @commands.has_permissions(administrator=True)
+    async def set_live_role(self, ctx, role: discord.Role):
+        await self.bot.db.execute("INSERT OR REPLACE INTO live_roles (guild_id, role_id) VALUES (?, ?)", (ctx.guild.id, role.id))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Auto-Live role set to {role.mention}")
+
+    @commands.hybrid_group(invoke_without_command=True, description="Creator profiles.")
+    async def creator(self, ctx):
+        await ctx.send("Use `/creator profile <user>` or `/creator setup`.")
+
+    @creator.command(description="Set up your creator profile.")
+    async def setup(self, ctx, bio: str = None, twitch: str = None, youtube: str = None, twitter: str = None, kick: str = None, tiktok: str = None):
+        await self.bot.db.execute("""
+            INSERT OR REPLACE INTO creator_profiles (user_id, bio, twitch, youtube, twitter, kick, tiktok)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (ctx.author.id, bio, twitch, youtube, twitter, kick, tiktok))
+        await self.bot.db.commit()
+        await ctx.send("✅ Creator profile updated!")
+
+    @creator.command(description="View a creator profile.")
+    async def profile(self, ctx, user: discord.Member = None):
+        user = user or ctx.author
+        async with self.bot.db.execute("SELECT bio, twitch, youtube, twitter, kick, tiktok FROM creator_profiles WHERE user_id = ?", (user.id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                await ctx.send(f"{user.display_name} has not set up a creator profile.")
+                return
+
+        bio, twitch, youtube, twitter, kick, tiktok = row
+        embed = discord.Embed(title=f"🎬 {user.display_name}'s Creator Profile", color=discord.Color.purple())
+        embed.set_thumbnail(url=user.display_avatar.url)
+        if bio: embed.description = bio
+        
+        links = []
+        if twitch: links.append(f"[Twitch]({twitch})")
+        if youtube: links.append(f"[YouTube]({youtube})")
+        if twitter: links.append(f"[Twitter]({twitter})")
+        if kick: links.append(f"[Kick]({kick})")
+        if tiktok: links.append(f"[TikTok]({tiktok})")
+        
+        if links:
+            embed.add_field(name="Socials", value=" | ".join(links))
+        
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_group(invoke_without_command=True, description="Manage streamer notifications.")
+    async def notify(self, ctx):
+        await ctx.send("Use `/notify subscribe <platform> <username>` or `/notify unsubscribe <platform> <username>`.")
+
+    @notify.command(description="Subscribe to a streamer's go-live alerts.")
+    async def subscribe(self, ctx, platform: str, username: str):
+        await self.bot.db.execute("INSERT OR IGNORE INTO streamer_subs (user_id, streamer_name, platform) VALUES (?, ?, ?)", (ctx.author.id, username.lower(), platform.lower()))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Subscribed to {username} on {platform}!")
+
+    @notify.command(description="Unsubscribe from a streamer's go-live alerts.")
+    async def unsubscribe(self, ctx, platform: str, username: str):
+        await self.bot.db.execute("DELETE FROM streamer_subs WHERE user_id = ? AND streamer_name = ? AND platform = ?", (ctx.author.id, username.lower(), platform.lower()))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Unsubscribed from {username} on {platform}.")
+
+    @commands.hybrid_group(invoke_without_command=True, description="Share and view stream clips.")
+    async def clip(self, ctx):
+        pass
+
+    @clip.command(description="Submit a clip.")
+    async def submit(self, ctx, streamer_name: str, url: str, *, description: str = ""):
+        timestamp = datetime.datetime.now().isoformat()
+        await self.bot.db.execute("INSERT INTO clips (guild_id, submitter_id, streamer_name, url, description, timestamp) VALUES (?, ?, ?, ?, ?, ?)", 
+                                  (ctx.guild.id, ctx.author.id, streamer_name, url, description, timestamp))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Clip submitted for **{streamer_name}**!")
+
+    @clip.command(description="List top clips.")
+    async def list(self, ctx):
+        async with self.bot.db.execute("SELECT id, streamer_name, url, description, upvotes FROM clips WHERE guild_id = ? ORDER BY upvotes DESC LIMIT 5", (ctx.guild.id,)) as cursor:
+            rows = await cursor.fetchall()
+            if not rows:
+                await ctx.send("No clips submitted yet.")
+                return
+            
+            embed = discord.Embed(title="🎬 Top Stream Clips", color=discord.Color.gold())
+            for id, streamer, url, desc, upvotes in rows:
+                embed.add_field(name=f"[{id}] {streamer} (👍 {upvotes})", value=f"{desc}\n{url}", inline=False)
+            await ctx.send(embed=embed)
+
+    @clip.command(description="Upvote a clip by ID.")
+    async def upvote(self, ctx, clip_id: int):
+        await self.bot.db.execute("UPDATE clips SET upvotes = upvotes + 1 WHERE id = ? AND guild_id = ?", (clip_id, ctx.guild.id))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Upvoted clip #{clip_id}!")
 
 async def setup(bot):
     await bot.add_cog(Streamers(bot))

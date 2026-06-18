@@ -21,6 +21,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.voice_states = True
+intents.presences = True
 
 class BOTR(commands.Bot):
     def __init__(self):
@@ -63,6 +64,33 @@ class BOTR(commands.Bot):
         except Exception as e:
             print(f"Setup Hook Error: {e}")
             with open("startup.log", "a") as f: f.write(f"Setup Hook Error: {e}\n")
+
+        # Global tree error handler
+        self.tree.on_error = self.on_app_command_error
+        
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.CommandNotFound):
+            return
+        elif isinstance(error, commands.MissingPermissions):
+            embed = discord.Embed(description=f"❌ You are missing permissions to use this command: `{', '.join(error.missing_permissions)}`", color=discord.Color.red())
+            await ctx.send(embed=embed, ephemeral=True)
+        elif isinstance(error, commands.BotMissingPermissions):
+            embed = discord.Embed(description=f"❌ I am missing permissions to execute this command: `{', '.join(error.missing_permissions)}`", color=discord.Color.red())
+            await ctx.send(embed=embed, ephemeral=True)
+        else:
+            embed = discord.Embed(description=f"❌ An error occurred: {str(error)}", color=discord.Color.red())
+            await ctx.send(embed=embed, ephemeral=True)
+            print(f"Command Error: {error}")
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+        embed = discord.Embed(description=f"❌ An error occurred: {str(error)}", color=discord.Color.red())
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        print(f"App Command Error: {error}")
+            
+
 
     async def create_tables(self):
         async with self.db.cursor() as cursor:
@@ -150,6 +178,14 @@ class BOTR(commands.Bot):
                     end_time TEXT,
                     winners_count INTEGER,
                     ended BOOLEAN DEFAULT 0
+                )
+            ''')
+            # Giveaway Entries Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS giveaway_entries (
+                    message_id INTEGER,
+                    user_id INTEGER,
+                    PRIMARY KEY (message_id, user_id)
                 )
             ''')
             # Raffles Table
@@ -297,6 +333,13 @@ class BOTR(commands.Bot):
                     channel_id INTEGER
                 )
             ''')
+            # Auto Roles Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auto_roles (
+                    guild_id INTEGER PRIMARY KEY,
+                    role_id INTEGER
+                )
+            ''')
             # Price Alerts Table
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS price_alerts (
@@ -368,6 +411,175 @@ class BOTR(commands.Bot):
                     amount INTEGER,
                     description TEXT,
                     timestamp TEXT
+                )
+            ''')
+            # Live Roles Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS live_roles (
+                    guild_id INTEGER PRIMARY KEY,
+                    role_id INTEGER
+                )
+            ''')
+            # Creator Profiles Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS creator_profiles (
+                    user_id INTEGER PRIMARY KEY,
+                    bio TEXT,
+                    twitch TEXT,
+                    youtube TEXT,
+                    twitter TEXT,
+                    kick TEXT,
+                    tiktok TEXT
+                )
+            ''')
+            # Streamer Subscriptions Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS streamer_subs (
+                    user_id INTEGER,
+                    streamer_name TEXT,
+                    platform TEXT,
+                    PRIMARY KEY (user_id, streamer_name, platform)
+                )
+            ''')
+            # Clips Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS clips (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    submitter_id INTEGER,
+                    streamer_name TEXT,
+                    url TEXT,
+                    description TEXT,
+                    upvotes INTEGER DEFAULT 0,
+                    timestamp TEXT
+                )
+            ''')
+            # Automod Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS automod_settings (
+                    guild_id INTEGER PRIMARY KEY,
+                    banned_words TEXT,
+                    anti_spam INTEGER DEFAULT 1,
+                    anti_caps INTEGER DEFAULT 1,
+                    punishment TEXT DEFAULT 'warn'
+                )
+            ''')
+            # Custom Commands Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS custom_commands (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    trigger TEXT,
+                    response TEXT
+                )
+            ''')
+            # Reminders Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    channel_id INTEGER,
+                    message TEXT,
+                    remind_time TEXT
+                )
+            ''')
+            # Clans Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS clans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE,
+                    owner_id INTEGER,
+                    bank INTEGER DEFAULT 0,
+                    level INTEGER DEFAULT 1
+                )
+            ''')
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS clan_members (
+                    user_id INTEGER PRIMARY KEY,
+                    clan_id INTEGER
+                )
+            ''')
+            # Quests Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS quests (
+                    user_id INTEGER PRIMARY KEY,
+                    quest_type TEXT,
+                    target INTEGER,
+                    progress INTEGER DEFAULT 0,
+                    completed INTEGER DEFAULT 0,
+                    date_assigned TEXT
+                )
+            ''')
+            # Price Alerts Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS price_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    ticker TEXT,
+                    target_price REAL,
+                    direction TEXT
+                )
+            ''')
+            # Copy Trades Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS copy_trades (
+                    follower_id INTEGER,
+                    target_id INTEGER,
+                    PRIMARY KEY (follower_id, target_id)
+                )
+            ''')
+            # Active Bets Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS active_bets (
+                    message_id INTEGER PRIMARY KEY,
+                    guild_id INTEGER,
+                    question TEXT,
+                    pool_yes INTEGER DEFAULT 0,
+                    pool_no INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'open'
+                )
+            ''')
+            # Bet Entries Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS bet_entries (
+                    message_id INTEGER,
+                    user_id INTEGER,
+                    choice TEXT,
+                    amount INTEGER,
+                    PRIMARY KEY (message_id, user_id)
+                )
+            ''')
+            # Pets Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS pets (
+                    user_id INTEGER PRIMARY KEY,
+                    pet_type TEXT,
+                    name TEXT,
+                    level INTEGER DEFAULT 1,
+                    xp INTEGER DEFAULT 0,
+                    last_fed TEXT
+                )
+            ''')
+            # VIP Roles Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS vip_roles (
+                    guild_id INTEGER,
+                    role_id INTEGER,
+                    multiplier REAL DEFAULT 1.5,
+                    PRIMARY KEY (guild_id, role_id)
+                )
+            ''')
+            # Guild Settings Table
+            await cursor.execute('''
+                CREATE TABLE IF NOT EXISTS guild_settings (
+                    guild_id INTEGER PRIMARY KEY,
+                    starboard_channel_id INTEGER,
+                    starboard_threshold INTEGER DEFAULT 3,
+                    starboard_emoji TEXT DEFAULT '⭐',
+                    log_channel_id INTEGER,
+                    auto_role_id INTEGER,
+                    live_role_id INTEGER,
+                    bot_admin_role_id INTEGER
                 )
             ''')
         await self.db.commit()

@@ -1,4 +1,4 @@
-discord.py
+discord.py[voice]
 aiosqlite
 python-dotenv
 yfinance
@@ -8,4 +8,9 @@ mplfinance
 aiofiles
 aiohttp
 tweepy
-
+Pillow
+yt-dlp
+PyNaCl
+Flask
+Flask-Discord
+requests

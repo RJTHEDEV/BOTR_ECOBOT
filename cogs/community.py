@@ -268,6 +268,18 @@ class Community(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
+        # Auto Role
+        async with self.bot.db.execute("SELECT role_id FROM auto_roles WHERE guild_id = ?", (member.guild.id,)) as cursor:
+            auto_role_row = await cursor.fetchone()
+        
+        if auto_role_row:
+            role = member.guild.get_role(auto_role_row[0])
+            if role:
+                try:
+                    await member.add_roles(role, reason="Auto Role")
+                except discord.Forbidden:
+                    pass
+
         # Check if welcome channel is set
         async with self.bot.db.execute("SELECT channel_id FROM welcome_settings WHERE guild_id = ?", (member.guild.id,)) as cursor:
             row = await cursor.fetchone()
@@ -320,6 +332,25 @@ class Community(commands.Cog):
         embed.set_footer(text=f"We are now {guild.member_count} members!")
 
         await channel.send(content=f"👋 Welcome {member.mention} to **{guild.name}**! 🎮", embed=embed)
+
+    # --- Auto Role ---
+    @commands.hybrid_group(invoke_without_command=True, description="Manage auto role settings.")
+    async def autorole(self, ctx):
+        await ctx.send("Use `/autorole set <role>` or `/autorole remove`.")
+
+    @autorole.command(name="set", description="Set the auto role for new members.")
+    @commands.has_permissions(administrator=True)
+    async def set_autorole(self, ctx, role: discord.Role):
+        await self.bot.db.execute("INSERT OR REPLACE INTO auto_roles (guild_id, role_id) VALUES (?, ?)", (ctx.guild.id, role.id))
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Auto role set to **{role.name}**.")
+
+    @autorole.command(name="remove", description="Remove the auto role.")
+    @commands.has_permissions(administrator=True)
+    async def remove_autorole(self, ctx):
+        await self.bot.db.execute("DELETE FROM auto_roles WHERE guild_id = ?", (ctx.guild.id,))
+        await self.bot.db.commit()
+        await ctx.send("✅ Auto role removed.")
 
     # --- Starboard ---
     @commands.Cog.listener()
@@ -413,6 +444,67 @@ class Community(commands.Cog):
             embed.description = "No birthdays in the next 30 days."
         
         await ctx.send(embed=embed)
+
+    @commands.hybrid_command(description="Create a button-based reaction role menu.")
+    @commands.has_permissions(administrator=True)
+    async def buttonroles(self, ctx, title: str, description: str, role1: discord.Role, role2: discord.Role = None, role3: discord.Role = None, role4: discord.Role = None, role5: discord.Role = None):
+        view = discord.ui.View(timeout=None)
+        roles = [r for r in [role1, role2, role3, role4, role5] if r]
+        
+        if len(roles) > 1:
+            all_ids = ",".join(str(r.id) for r in roles)
+            btn = discord.ui.Button(label="All", style=discord.ButtonStyle.blurple, custom_id=f"rr:all:{all_ids}")
+            view.add_item(btn)
+        
+        for role in roles:
+            style = discord.ButtonStyle.secondary
+            name_lower = role.name.lower()
+            if "red" in name_lower: style = discord.ButtonStyle.danger
+            elif "green" in name_lower: style = discord.ButtonStyle.success
+            elif "blue" in name_lower: style = discord.ButtonStyle.primary
+            
+            btn = discord.ui.Button(label=role.name, style=style, custom_id=f"rr:single:{role.id}")
+            view.add_item(btn)
+        
+        embed = discord.Embed(title=title, description=description, color=discord.Color.dark_theme())
+        await ctx.send(embed=embed, view=view)
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if not interaction.type == discord.InteractionType.component: return
+        custom_id = interaction.data.get('custom_id', '')
+        if not custom_id.startswith('rr:'): return
+        
+        parts = custom_id.split(':')
+        if len(parts) < 3: return
+        action = parts[1]
+        
+        if action == "all":
+            role_ids = parts[2].split(',')
+            roles = [interaction.guild.get_role(int(r_id)) for r_id in role_ids]
+            roles = [r for r in roles if r]
+            
+            has_all = all(r in interaction.user.roles for r in roles)
+            
+            if has_all:
+                await interaction.user.remove_roles(*roles)
+                await interaction.response.send_message("Removed all roles.", ephemeral=True)
+            else:
+                await interaction.user.add_roles(*roles)
+                await interaction.response.send_message("Added all roles.", ephemeral=True)
+        elif action == "single":
+            role_id = int(parts[2])
+            role = interaction.guild.get_role(role_id)
+            if not role:
+                await interaction.response.send_message("Role not found.", ephemeral=True)
+                return
+            
+            if role in interaction.user.roles:
+                await interaction.user.remove_roles(role)
+                await interaction.response.send_message(f"Removed {role.name}.", ephemeral=True)
+            else:
+                await interaction.user.add_roles(role)
+                await interaction.response.send_message(f"Added {role.name}.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Community(bot))
