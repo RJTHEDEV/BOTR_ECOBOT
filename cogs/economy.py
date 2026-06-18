@@ -3,6 +3,119 @@ from discord.ext import commands, tasks
 import random
 import time
 import datetime
+import math
+
+class LeaderboardSelect(discord.ui.Select):
+    def __init__(self, parent_view):
+        self.parent_view = parent_view
+        options = [
+            discord.SelectOption(label="Richest (Net Worth)", emoji="💰", value="richest", description="Highest combined wallet and bank balance"),
+            discord.SelectOption(label="Ticket Hoarders", emoji="🎟️", value="tickets", description="Most tickets collected"),
+            discord.SelectOption(label="Highest Level", emoji="📈", value="level", description="Highest XP and Level"),
+            discord.SelectOption(label="Hardest Workers", emoji="🏢", value="work_shifts", description="Most /work shifts completed"),
+            discord.SelectOption(label="Most Wanted", emoji="🚔", value="wanted_level", description="Highest Wanted Level from crimes"),
+            discord.SelectOption(label="Most Reputable", emoji="🌟", value="reputation", description="Highest community reputation")
+        ]
+        super().__init__(placeholder="Select a Leaderboard...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        self.parent_view.category = self.values[0]
+        self.parent_view.page = 1
+        await self.parent_view.update_leaderboard(interaction)
+
+class LeaderboardView(discord.ui.View):
+    def __init__(self, cog, guild, user):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.guild = guild
+        self.user = user
+        self.page = 1
+        self.category = "richest"
+        
+        self.add_item(LeaderboardSelect(self))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    async def get_data(self):
+        per_page = 10
+        offset = (self.page - 1) * per_page
+        
+        query_map = {
+            "richest": ("SELECT user_id, balance + bank AS val FROM users ORDER BY val DESC LIMIT ? OFFSET ?", "Net Worth", "${val}"),
+            "tickets": ("SELECT user_id, tickets AS val FROM users ORDER BY val DESC LIMIT ? OFFSET ?", "Tickets", "🎟️ {val}"),
+            "level": ("SELECT user_id, xp AS val, level FROM users ORDER BY val DESC LIMIT ? OFFSET ?", "Experience", "Level {level} (XP: {val})"),
+            "work_shifts": ("SELECT user_id, work_shifts AS val FROM users ORDER BY val DESC LIMIT ? OFFSET ?", "Shifts Completed", "{val} shifts"),
+            "wanted_level": ("SELECT user_id, wanted_level AS val FROM users ORDER BY val DESC LIMIT ? OFFSET ?", "Wanted Level", "⭐ {val}"),
+            "reputation": ("SELECT user_id, reputation AS val FROM users ORDER BY val DESC LIMIT ? OFFSET ?", "Reputation", "🌟 {val}")
+        }
+        
+        query, stat_name, format_str = query_map[self.category]
+        
+        async with self.cog.bot.db.execute("SELECT COUNT(*) FROM users") as cursor:
+            total_users = (await cursor.fetchone())[0]
+        
+        total_pages = max(1, math.ceil(total_users / per_page))
+        self.btn_prev.disabled = (self.page <= 1)
+        self.btn_next.disabled = (self.page >= total_pages)
+        
+        async with self.cog.bot.db.execute(query, (per_page, offset)) as cursor:
+            rows = await cursor.fetchall()
+            
+        return rows, total_pages, stat_name, format_str, offset
+
+    async def update_leaderboard(self, interaction: discord.Interaction):
+        rows, total_pages, stat_name, format_str, offset = await self.get_data()
+        
+        titles = {
+            "richest": "💰 Richest Citizens",
+            "tickets": "🎟️ Ticket Hoarders",
+            "level": "📈 Highest Levels",
+            "work_shifts": "🏢 Hardest Workers",
+            "wanted_level": "🚔 Most Wanted Criminals",
+            "reputation": "🌟 Most Reputable"
+        }
+        
+        embed = discord.Embed(title=titles[self.category], color=discord.Color.gold())
+        
+        if not rows:
+            embed.description = "No data available."
+        else:
+            for i, row in enumerate(rows, 1):
+                rank = offset + i
+                user_id = row[0]
+                val = row[1]
+                
+                member = self.guild.get_member(user_id)
+                name = member.display_name if member else f"Unknown User ({user_id})"
+                
+                # Emojis for top 3
+                prefix = ""
+                if rank == 1: prefix = "🥇 "
+                elif rank == 2: prefix = "🥈 "
+                elif rank == 3: prefix = "🥉 "
+                else: prefix = f"#{rank} "
+                
+                if self.category == "level":
+                    val_str = format_str.format(val=val, level=row[2])
+                else:
+                    val_str = format_str.format(val=val)
+                    
+                embed.add_field(name=f"{prefix}{name}", value=f"**{stat_name}:** {val_str}", inline=False)
+                
+        embed.set_footer(text=f"Page {self.page}/{total_pages} | Requested by {self.user.display_name}")
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="◀ Previous", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page -= 1
+        await self.update_leaderboard(interaction)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        await self.update_leaderboard(interaction)
 
 class WorkView(discord.ui.View):
     def __init__(self, cog, user, shifts):
@@ -595,35 +708,33 @@ class Economy(commands.Cog):
         else:
             await ctx.send(f"❌ **{item_name.title()}** is not a usable item.")
 
-    @commands.hybrid_command(description="View the Richest Leaderboard.")
-    async def richest(self, ctx, page: int = 1):
-        if page < 1: page = 1
-        per_page = 10
-        offset = (page - 1) * per_page
+    @commands.hybrid_command(aliases=["top"], description="View the interactive Global Leaderboards.")
+    async def leaderboard(self, ctx):
+        view = LeaderboardView(self, ctx.guild, ctx.author)
         
-        async with self.bot.db.execute("SELECT COUNT(*) FROM users") as cursor:
-            total_users = (await cursor.fetchone())[0]
-            
-        total_pages = (total_users + per_page - 1) // per_page
-        if not total_pages: total_pages = 1
+        rows, total_pages, stat_name, format_str, offset = await view.get_data()
         
-        if page > total_pages:
-            await ctx.send(f"Page {page} does not exist. Total pages: {total_pages}")
-            return
-
-        async with self.bot.db.execute("SELECT user_id, balance, bank FROM users ORDER BY (balance + bank) DESC LIMIT ? OFFSET ?", (per_page, offset)) as cursor:
-            rows = await cursor.fetchall()
-        
-        embed = discord.Embed(title="💰 Richest Leaderboard", color=discord.Color.green())
-        for i, (user_id, bal, bank) in enumerate(rows, 1):
+        embed = discord.Embed(title="💰 Richest Citizens", color=discord.Color.gold())
+        for i, row in enumerate(rows, 1):
             rank = offset + i
-            user = ctx.guild.get_member(user_id)
-            name = user.display_name if user else f"User {user_id}"
-            net_worth = bal + bank
-            embed.add_field(name=f"#{rank} {name}", value=f"**Net Worth:** ${net_worth}\n(Wallet: ${bal} | Bank: ${bank})", inline=False)
+            user_id = row[0]
+            val = row[1]
+            
+            member = ctx.guild.get_member(user_id)
+            name = member.display_name if member else f"Unknown User ({user_id})"
+            
+            prefix = ""
+            if rank == 1: prefix = "🥇 "
+            elif rank == 2: prefix = "🥈 "
+            elif rank == 3: prefix = "🥉 "
+            else: prefix = f"#{rank} "
+            
+            val_str = format_str.format(val=val)
+            embed.add_field(name=f"{prefix}{name}", value=f"**{stat_name}:** {val_str}", inline=False)
+            
+        embed.set_footer(text=f"Page 1/{total_pages} | Requested by {ctx.author.display_name}")
         
-        embed.set_footer(text=f"Page {page}/{total_pages} | Use !richest <page>")
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
