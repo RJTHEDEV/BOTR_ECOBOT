@@ -366,48 +366,6 @@ class Economy(commands.Cog):
         embed.description = desc
         embed.set_footer(text=f"Page {page}/{total_pages} | Total: {total_logs}")
         await ctx.send(embed=embed)
-
-    async def log_transaction(self, user_id, type, amount, description):
-        timestamp = datetime.datetime.now().isoformat()
-        await self.bot.db.execute("INSERT INTO transaction_logs (user_id, type, amount, description, timestamp) VALUES (?, ?, ?, ?, ?)", 
-                                  (user_id, type, amount, description, timestamp))
-        await self.bot.db.commit()
-
-    @commands.hybrid_command(name="currencylog", aliases=["cl"], description="View your currency transaction history.")
-    async def currencylog(self, ctx, page: int = 1):
-        if page < 1: page = 1
-        per_page = 10
-        offset = (page - 1) * per_page
-
-        async with self.bot.db.execute("SELECT COUNT(*) FROM transaction_logs WHERE user_id = ?", (ctx.author.id,)) as cursor:
-            total_logs = (await cursor.fetchone())[0]
-        
-        if total_logs == 0:
-            await ctx.send("No transaction history found.")
-            return
-
-        total_pages = (total_logs + per_page - 1) // per_page
-        if page > total_pages:
-            await ctx.send(f"Page {page} does not exist. Total pages: {total_pages}")
-            return
-
-        async with self.bot.db.execute("SELECT type, amount, description, timestamp FROM transaction_logs WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?", (ctx.author.id, per_page, offset)) as cursor:
-            logs = await cursor.fetchall()
-        
-        embed = discord.Embed(title=f"📜 Currency Log: {ctx.author.display_name}", color=discord.Color.blue())
-        
-        desc = ""
-        for type, amount, description, timestamp in logs:
-            amount_str = f"+${amount}" if amount >= 0 else f"-${abs(amount)}"
-            emoji = "🟢" if amount >= 0 else "🔴"
-            dt = datetime.datetime.fromisoformat(timestamp)
-            date_str = f"<t:{int(dt.timestamp())}:f>"
-            
-            desc += f"{emoji} **{type.title()}** ({amount_str})\n{description} • {date_str}\n\n"
-        
-        embed.description = desc
-        embed.set_footer(text=f"Page {page}/{total_pages} | Total: {total_logs}")
-        await ctx.send(embed=embed)
     @commands.hybrid_command(description="Check your coin and ticket balance.")
     async def balance(self, ctx):
         print(f"Balance command invoked by {ctx.author} ({ctx.author.id})")
