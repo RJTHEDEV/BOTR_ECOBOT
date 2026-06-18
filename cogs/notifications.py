@@ -285,7 +285,7 @@ class Notifications(commands.Cog):
                     
                     if is_live_now and not db_is_live:
                         # WENT LIVE
-                        await self._handle_live_role(guild_id, discord_user_id, add=True)!
+                        await self._handle_live_role(guild_id, discord_user_id, add=True)
                         stream = stream_data[0]
                         title = stream.get("title", "No Title")
                         game = stream.get("game_name", "Just Chatting")
