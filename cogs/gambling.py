@@ -3,6 +3,43 @@ from discord.ext import commands
 import random
 import asyncio
 
+class PlayAgainView(discord.ui.View):
+    def __init__(self, cog, user, game_choice, bet):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user = user
+        self.game_choice = game_choice
+        self.bet = bet
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    @discord.ui.button(label="Play Again", style=discord.ButtonStyle.primary, emoji="🔄")
+    async def btn_play_again(self, interaction: discord.Interaction, button: discord.ui.Button):
+        balance = await self.cog.get_balance(self.user.id)
+        if balance < self.bet:
+            await interaction.response.send_message("❌ You don't have enough money to play again.", ephemeral=True)
+            return
+            
+        await interaction.response.defer()
+        
+        await self.cog.update_balance(self.user.id, -self.bet, f"Casino Bet ({self.game_choice})")
+        
+        for item in self.children: item.disabled = True
+        try: await interaction.message.edit(view=self)
+        except: pass
+        
+        if self.game_choice == "blackjack":
+            await self.cog.start_blackjack(interaction.channel, self.user, self.bet)
+        elif self.game_choice == "slots":
+            await self.cog.start_slots(interaction.channel, self.user, self.bet)
+        elif self.game_choice == "highlow":
+            await self.cog.start_highlow(interaction.channel, self.user, self.bet)
+        elif self.game_choice == "coinflip":
+            await self.cog.start_coinflip(interaction.channel, self.user, self.bet)
+        elif self.game_choice == "snakeeyes":
+            await self.cog.start_snakeeyes(interaction.channel, self.user, self.bet)
+
 class BlackjackView(discord.ui.View):
     def __init__(self, cog, user, bet, deck, player_hand, dealer_hand, msg):
         super().__init__(timeout=60)
@@ -49,7 +86,7 @@ class BlackjackView(discord.ui.View):
             await self.cog.add_to_jackpot(self.bet)
             embed = self.create_embed(score, self.calculate_score(self.dealer_hand), False)
             embed.description = f"💥 **Bust!** You went over 21. You lost **${self.bet}**."
-            await self.msg.edit(embed=embed, view=None)
+            await self.msg.edit(embed=embed, view=PlayAgainView(self.cog, self.user, "blackjack", self.bet))
         else:
             embed = self.create_embed(score)
             await interaction.response.edit_message(embed=embed, view=self)
@@ -81,7 +118,7 @@ class BlackjackView(discord.ui.View):
             await self.cog.add_to_jackpot(self.bet)
             embed.description = f"📉 **Dealer Wins.** You lost **${self.bet}**."
 
-        await self.msg.edit(embed=embed, view=None)
+        await self.msg.edit(embed=embed, view=PlayAgainView(self.cog, self.user, "blackjack", self.bet))
 
 class HighLowView(discord.ui.View):
     def __init__(self, cog, user, bet, current, msg):
@@ -119,7 +156,7 @@ class HighLowView(discord.ui.View):
             embed.description = f"The new number is **{next_num}**. You guessed wrong and lost **${self.bet}**."
             embed.color = discord.Color.red()
             
-        await self.msg.edit(embed=embed, view=None)
+        await self.msg.edit(embed=embed, view=PlayAgainView(self.cog, self.user, "highlow", self.bet))
 
     @discord.ui.button(label="Higher", style=discord.ButtonStyle.success, emoji="⬆️")
     async def btn_higher(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -161,7 +198,7 @@ class CoinFlipView(discord.ui.View):
             embed.description = f"It landed on **{result.title()}**... You lost **${self.bet}**."
             embed.color = discord.Color.red()
             
-        await self.msg.edit(embed=embed, view=None)
+        await self.msg.edit(embed=embed, view=PlayAgainView(self.cog, self.user, "coinflip", self.bet))
 
     @discord.ui.button(label="Heads", style=discord.ButtonStyle.primary)
     async def btn_heads(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -318,7 +355,7 @@ class Gambling(commands.Cog):
             embed.description = f"**{a} | {b} | {c}**\n\nBetter luck next time. You lost **${bet}**."
             embed.color = discord.Color.red()
             
-        await msg.edit(embed=embed)
+        await msg.edit(embed=embed, view=PlayAgainView(self, user, "slots", bet))
 
     async def start_blackjack(self, channel, user, bet):
         deck = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11] * 4
@@ -347,7 +384,7 @@ class Gambling(commands.Cog):
             winnings = int(bet * 2.5)
             await self.update_balance(user.id, winnings, "Blackjack 21")
             embed.description = f"🎉 **Blackjack!** You won **${winnings}**!"
-            await msg.edit(embed=embed)
+            await msg.edit(embed=embed, view=PlayAgainView(self, user, "blackjack", bet))
             return
             
         view = BlackjackView(self, user, bet, deck, player_hand, dealer_hand, msg)
@@ -392,7 +429,7 @@ class Gambling(commands.Cog):
             embed.description = f"You rolled **{d1}** and **{d2}**.\n\n😢 No pair. You lost **${bet}**."
             embed.color = discord.Color.red()
             
-        await msg.edit(embed=embed)
+        await msg.edit(embed=embed, view=PlayAgainView(self, user, "snakeeyes", bet))
 
 async def setup(bot):
     await bot.add_cog(Gambling(bot))
