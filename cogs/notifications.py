@@ -13,12 +13,12 @@ class Notifications(commands.Cog):
         self.check_youtube.cancel()
         self.check_twitch.cancel()
 
-    @commands.hybrid_group(name="notify", description="Setup automated notifications for content creators.")
+    @commands.hybrid_group(name="alerts", description="Setup automated notifications for content creators.")
     @commands.has_permissions(administrator=True)
-    async def notify(self, ctx):
+    async def notify_group(self, ctx):
         pass
 
-    @notify.command(name="youtube", description="Add a YouTube channel to post notifications for.")
+    @notify_group.command(name="youtube", description="Add a YouTube channel to post notifications for.")
     @commands.has_permissions(administrator=True)
     async def add_youtube(self, ctx, channel_id: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
         """
@@ -61,7 +61,7 @@ class Notifications(commands.Cog):
         embed.description = f"Successfully set up notifications for Channel ID `{channel_id}`!\nWhenever they upload, I'll post in {discord_channel.mention}."
         await ctx.send(embed=embed)
 
-    @notify.command(name="remove_youtube", description="Stop monitoring a YouTube channel.")
+    @notify_group.command(name="remove_youtube", description="Stop monitoring a YouTube channel.")
     @commands.has_permissions(administrator=True)
     async def remove_youtube(self, ctx, channel_id: str):
         await self.bot.db.execute("DELETE FROM youtube_alerts WHERE guild_id = ? AND youtube_channel_id = ?", (ctx.guild.id, channel_id))
@@ -146,7 +146,7 @@ class Notifications(commands.Cog):
         except Exception as e:
             print(f"Error in youtube alert loop: {e}")
 
-    @notify.command(name="twitch", description="Add a Twitch streamer to post notifications for.")
+    @notify_group.command(name="twitch", description="Add a Twitch streamer to post notifications for.")
     @commands.has_permissions(administrator=True)
     async def add_twitch(self, ctx, twitch_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
         async with self.bot.db.execute("SELECT id FROM twitch_alerts WHERE guild_id = ? AND twitch_username = ?", (ctx.guild.id, twitch_username.lower())) as cursor:
@@ -165,7 +165,7 @@ class Notifications(commands.Cog):
         embed.set_footer(text="Note: Requires TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET in .env")
         await ctx.send(embed=embed)
 
-    @notify.command(name="remove_twitch", description="Stop monitoring a Twitch streamer.")
+    @notify_group.command(name="remove_twitch", description="Stop monitoring a Twitch streamer.")
     @commands.has_permissions(administrator=True)
     async def remove_twitch(self, ctx, twitch_username: str):
         await self.bot.db.execute("DELETE FROM twitch_alerts WHERE guild_id = ? AND twitch_username = ?", (ctx.guild.id, twitch_username.lower()))
