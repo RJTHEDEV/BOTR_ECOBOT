@@ -22,6 +22,27 @@ class Notifications(commands.Cog):
     async def notify_group(self, ctx):
         pass
 
+    async def _handle_live_role(self, guild_id, discord_user_id, add=True):
+        if not discord_user_id: return
+        try:
+            guild = self.bot.get_guild(guild_id)
+            if not guild: return
+            member = guild.get_member(discord_user_id)
+            if not member: return
+            
+            async with self.bot.db.execute("SELECT role_id FROM live_roles WHERE guild_id = ?", (guild_id,)) as cursor:
+                row = await cursor.fetchone()
+                if not row: return
+                live_role = guild.get_role(row[0])
+                if not live_role: return
+                
+            if add:
+                await member.add_roles(live_role, reason="Streamer Alert Live Role")
+            else:
+                await member.remove_roles(live_role, reason="Streamer Alert Live Role")
+        except Exception as e:
+            print(f"Failed to handle live role for {discord_user_id}: {e}")
+
     @notify_group.command(name="list", description="List all active content alerts in this server.")
     @commands.has_permissions(administrator=True)
     async def list_alerts(self, ctx):
@@ -62,7 +83,7 @@ class Notifications(commands.Cog):
 
     @notify_group.command(name="youtube", description="Add a YouTube channel to post notifications for.")
     @commands.has_permissions(administrator=True)
-    async def add_youtube(self, ctx, channel_id: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
+    async def add_youtube(self, ctx, channel_id: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         """
         Add a YouTube channel.
         To get the channel ID, go to their channel, and it's the ID starting with UC in the URL.
@@ -94,8 +115,8 @@ class Notifications(commands.Cog):
             print(f"Error fetching initial youtube feed: {e}")
 
         await self.bot.db.execute(
-            "INSERT INTO youtube_alerts (guild_id, channel_id, youtube_channel_id, last_video_id, custom_message) VALUES (?, ?, ?, ?, ?)",
-            (ctx.guild.id, discord_channel.id, channel_id, last_video_id, custom_message)
+            "INSERT INTO youtube_alerts (guild_id, channel_id, youtube_channel_id, last_video_id, discord_user_id, custom_message) VALUES (?, ?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, channel_id, last_video_id, discord_user.id if discord_user else None, custom_message)
         )
         await self.bot.db.commit()
 
@@ -190,15 +211,15 @@ class Notifications(commands.Cog):
 
     @notify_group.command(name="twitch", description="Add a Twitch streamer to post notifications for.")
     @commands.has_permissions(administrator=True)
-    async def add_twitch(self, ctx, twitch_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
+    async def add_twitch(self, ctx, twitch_username: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         async with self.bot.db.execute("SELECT id FROM twitch_alerts WHERE guild_id = ? AND twitch_username = ?", (ctx.guild.id, twitch_username.lower())) as cursor:
             if await cursor.fetchone():
                 await ctx.send("❌ This Twitch channel is already being monitored in this server!", ephemeral=True)
                 return
 
         await self.bot.db.execute(
-            "INSERT INTO twitch_alerts (guild_id, channel_id, twitch_username, is_live, custom_message) VALUES (?, ?, ?, ?, ?)",
-            (ctx.guild.id, discord_channel.id, twitch_username.lower(), 0, custom_message)
+            "INSERT INTO twitch_alerts (guild_id, channel_id, twitch_username, is_live, discord_user_id, custom_message) VALUES (?, ?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, twitch_username.lower(), 0, discord_user.id if discord_user else None, custom_message)
         )
         await self.bot.db.commit()
 
@@ -225,7 +246,7 @@ class Notifications(commands.Cog):
         await self.bot.wait_until_ready()
         
         try:
-            async with self.bot.db.execute("SELECT id, guild_id, channel_id, twitch_username, is_live, custom_message FROM twitch_alerts") as cursor:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, twitch_username, is_live, discord_user_id, custom_message FROM twitch_alerts") as cursor:
                 alerts = await cursor.fetchall()
                 
             if not alerts: return
@@ -253,7 +274,7 @@ class Notifications(commands.Cog):
                 
                 # We can batch requests, but for simplicity we'll loop
                 for alert in alerts:
-                    db_id, guild_id, discord_channel_id, twitch_username, db_is_live, custom_message = alert
+                    db_id, guild_id, discord_channel_id, twitch_username, db_is_live, discord_user_id, custom_message = alert
                     
                     async with session.get(f"https://api.twitch.tv/helix/streams?user_login={twitch_username}", headers=headers) as resp:
                         if resp.status != 200: continue
@@ -263,7 +284,8 @@ class Notifications(commands.Cog):
                     is_live_now = 1 if len(stream_data) > 0 else 0
                     
                     if is_live_now and not db_is_live:
-                        # WENT LIVE!
+                        # WENT LIVE
+                        await self._handle_live_role(guild_id, discord_user_id, add=True)!
                         stream = stream_data[0]
                         title = stream.get("title", "No Title")
                         game = stream.get("game_name", "Just Chatting")
@@ -312,21 +334,22 @@ class Notifications(commands.Cog):
                         # WENT OFFLINE
                         await self.bot.db.execute("UPDATE twitch_alerts SET is_live = 0 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
+                        await self._handle_live_role(guild_id, discord_user_id, add=False)
                         
         except Exception as e:
             print(f"Error in twitch alert loop: {e}")
 
     @notify_group.command(name="kick", description="Add a Kick streamer to post notifications for.")
     @commands.has_permissions(administrator=True)
-    async def add_kick(self, ctx, kick_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
+    async def add_kick(self, ctx, kick_username: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         async with self.bot.db.execute("SELECT id FROM kick_alerts WHERE guild_id = ? AND kick_username = ?", (ctx.guild.id, kick_username.lower())) as cursor:
             if await cursor.fetchone():
                 await ctx.send("❌ This Kick channel is already being monitored in this server!", ephemeral=True)
                 return
 
         await self.bot.db.execute(
-            "INSERT INTO kick_alerts (guild_id, channel_id, kick_username, is_live, custom_message) VALUES (?, ?, ?, ?, ?)",
-            (ctx.guild.id, discord_channel.id, kick_username.lower(), 0, custom_message)
+            "INSERT INTO kick_alerts (guild_id, channel_id, kick_username, is_live, discord_user_id, custom_message) VALUES (?, ?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, kick_username.lower(), 0, discord_user.id if discord_user else None, custom_message)
         )
         await self.bot.db.commit()
 
@@ -345,14 +368,14 @@ class Notifications(commands.Cog):
     async def check_kick(self):
         await self.bot.wait_until_ready()
         try:
-            async with self.bot.db.execute("SELECT id, guild_id, channel_id, kick_username, is_live, custom_message FROM kick_alerts") as cursor:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, kick_username, is_live, discord_user_id, custom_message FROM kick_alerts") as cursor:
                 alerts = await cursor.fetchall()
                 
             if not alerts: return
             
             async with aiohttp.ClientSession() as session:
                 for alert in alerts:
-                    db_id, guild_id, discord_channel_id, kick_username, db_is_live, custom_message = alert
+                    db_id, guild_id, discord_channel_id, kick_username, db_is_live, discord_user_id, custom_message = alert
                     
                     is_live_now = False
                     try:
@@ -372,6 +395,7 @@ class Notifications(commands.Cog):
                         
                     if is_live_now and not db_is_live:
                         # WENT LIVE
+                        await self._handle_live_role(guild_id, discord_user_id, add=True)
                         await self.bot.db.execute("UPDATE kick_alerts SET is_live = 1 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
                         
@@ -403,12 +427,13 @@ class Notifications(commands.Cog):
                     elif not is_live_now and db_is_live:
                         await self.bot.db.execute("UPDATE kick_alerts SET is_live = 0 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
+                        await self._handle_live_role(guild_id, discord_user_id, add=False)
         except Exception as e:
             print(f"Error in kick alert loop: {e}")
 
     @notify_group.command(name="tiktok", description="Add a TikTok streamer to post notifications for.")
     @commands.has_permissions(administrator=True)
-    async def add_tiktok(self, ctx, tiktok_username: str, discord_channel: discord.TextChannel, custom_message: str = "@everyone"):
+    async def add_tiktok(self, ctx, tiktok_username: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         tiktok_username = tiktok_username.replace("@", "")
         
         # Initial fetch of latest video id
@@ -429,8 +454,8 @@ class Notifications(commands.Cog):
                 return
 
         await self.bot.db.execute(
-            "INSERT INTO tiktok_alerts (guild_id, channel_id, tiktok_username, is_live, last_video_id, custom_message) VALUES (?, ?, ?, ?, ?, ?)",
-            (ctx.guild.id, discord_channel.id, tiktok_username.lower(), 0, last_video_id, custom_message)
+            "INSERT INTO tiktok_alerts (guild_id, channel_id, tiktok_username, is_live, last_video_id, discord_user_id, custom_message) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (ctx.guild.id, discord_channel.id, tiktok_username.lower(), 0, last_video_id, discord_user.id if discord_user else None, custom_message)
         )
         await self.bot.db.commit()
 
@@ -450,14 +475,14 @@ class Notifications(commands.Cog):
     async def check_tiktok(self):
         await self.bot.wait_until_ready()
         try:
-            async with self.bot.db.execute("SELECT id, guild_id, channel_id, tiktok_username, is_live, last_video_id, custom_message FROM tiktok_alerts") as cursor:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, tiktok_username, is_live, last_video_id, discord_user_id, custom_message FROM tiktok_alerts") as cursor:
                 alerts = await cursor.fetchall()
                 
             if not alerts: return
             
             async with aiohttp.ClientSession() as session:
                 for alert in alerts:
-                    db_id, guild_id, discord_channel_id, tiktok_username, db_is_live, db_last_video_id, custom_message = alert
+                    db_id, guild_id, discord_channel_id, tiktok_username, db_is_live, db_last_video_id, discord_user_id, custom_message = alert
                     
                     is_live_now = False
                     # 1. Check Live Status
@@ -472,6 +497,7 @@ class Notifications(commands.Cog):
                         
                     if is_live_now and not db_is_live:
                         # WENT LIVE
+                        await self._handle_live_role(guild_id, discord_user_id, add=True)
                         await self.bot.db.execute("UPDATE tiktok_alerts SET is_live = 1 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
                         
@@ -495,6 +521,7 @@ class Notifications(commands.Cog):
                     elif not is_live_now and db_is_live:
                         await self.bot.db.execute("UPDATE tiktok_alerts SET is_live = 0 WHERE id = ?", (db_id,))
                         await self.bot.db.commit()
+                        await self._handle_live_role(guild_id, discord_user_id, add=False)
 
                     # 2. Check New Videos
                     try:
