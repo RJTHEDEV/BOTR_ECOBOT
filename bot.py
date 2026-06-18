@@ -668,9 +668,12 @@ class BOTR(commands.Bot):
         # Add a sync command for admins
         if message.content == "!sync" and message.author.guild_permissions.administrator:
             try:
-                self.tree.copy_global_to(guild=message.guild)
-                synced = await self.tree.sync(guild=message.guild)
-                await message.channel.send(f"Synced {len(synced)} commands to this guild.")
+                # Sync globally
+                synced = await self.tree.sync()
+                # Clear any lingering guild-specific commands that cause duplicates
+                self.tree.clear_commands(guild=message.guild)
+                await self.tree.sync(guild=message.guild)
+                await message.channel.send(f"✅ Synced {len(synced)} global commands and cleared duplicate guild commands.\n*Note: You may need to restart your Discord app to see the duplicates disappear.*")
             except Exception as e:
                 await message.channel.send(f"Error syncing: {e}")
             return
