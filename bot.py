@@ -118,6 +118,11 @@ class BOTR(commands.Bot):
             except: pass
             try: await cursor.execute("ALTER TABLE users ADD COLUMN wanted_level INTEGER DEFAULT 0")
             except: pass
+            
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN casino_vip INTEGER DEFAULT 0")
+            except: pass
+            try: await cursor.execute("ALTER TABLE users ADD COLUMN xp_boost_expiry TEXT")
+            except: pass
 
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
@@ -135,7 +140,9 @@ class BOTR(commands.Bot):
                     last_rep TEXT,
                     daily_streak INTEGER DEFAULT 0,
                     work_shifts INTEGER DEFAULT 0,
-                    wanted_level INTEGER DEFAULT 0
+                    wanted_level INTEGER DEFAULT 0,
+                    casino_vip INTEGER DEFAULT 0,
+                    xp_boost_expiry TEXT
                 )
             ''')
             # Inventory Table

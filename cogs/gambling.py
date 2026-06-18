@@ -147,9 +147,15 @@ class HighLowView(discord.ui.View):
             await self.cog.update_balance(self.user.id, self.bet, "HighLow Push")
             embed.description = f"The new number is **{next_num}**. It's a tie! Bet returned."
         elif win:
-            winnings = int(self.bet * 1.8)
+            async with self.cog.bot.db.execute("SELECT casino_vip FROM users WHERE user_id = ?", (self.user.id,)) as cursor:
+                row = await cursor.fetchone()
+                is_vip = bool(row[0]) if row else False
+            
+            multiplier = 2.0 if is_vip else 1.8
+            winnings = int(self.bet * multiplier)
             await self.cog.update_balance(self.user.id, winnings, "HighLow Win")
-            embed.description = f"The new number is **{next_num}**. You guessed correctly and won **${winnings}**!"
+            vip_text = " *(VIP Multiplier!)*" if is_vip else ""
+            embed.description = f"The new number is **{next_num}**. You guessed correctly and won **${winnings}**!{vip_text}"
             embed.color = discord.Color.green()
         else:
             await self.cog.add_to_jackpot(self.bet)
@@ -178,24 +184,27 @@ class CoinFlipView(discord.ui.View):
         return interaction.user == self.user
 
     async def process_flip(self, interaction, choice):
-        for item in self.children: item.disabled = True
-        
-        # Spin animation
-        anim_embed = discord.Embed(title="🪙 Coin Flip", description="Flipping the coin...", color=discord.Color.gold())
-        await interaction.response.edit_message(embed=anim_embed, view=self)
-        await asyncio.sleep(1.5)
-        
+        await interaction.response.defer()
+        for child in self.children:
+            child.disabled = True
+            
         result = random.choice(["heads", "tails"])
+        embed = discord.Embed(title="🪙 Coin Flip", color=discord.Color.blue())
         
-        embed = discord.Embed(title="🪙 Coin Flip", color=discord.Color.gold())
         if choice == result:
-            winnings = self.bet * 2
-            await self.cog.update_balance(self.user.id, winnings, "Coinflip Win")
-            embed.description = f"It landed on **{result.title()}**! You won **${winnings}**!"
+            async with self.cog.bot.db.execute("SELECT casino_vip FROM users WHERE user_id = ?", (self.user.id,)) as cursor:
+                row = await cursor.fetchone()
+                is_vip = bool(row[0]) if row else False
+                
+            multiplier = 2.2 if is_vip else 2.0
+            winnings = int(self.bet * multiplier)
+            await self.cog.update_balance(self.user.id, winnings, "CoinFlip Win")
+            vip_text = " *(VIP Boost!)*" if is_vip else ""
+            embed.description = f"The coin landed on **{result.title()}**!\nYou guessed correctly and won **${winnings}**!{vip_text}"
             embed.color = discord.Color.green()
         else:
             await self.cog.add_to_jackpot(self.bet)
-            embed.description = f"It landed on **{result.title()}**... You lost **${self.bet}**."
+            embed.description = f"The coin landed on **{result.title()}**!\nYou guessed wrong and lost **${self.bet}**."
             embed.color = discord.Color.red()
             
         await self.msg.edit(embed=embed, view=PlayAgainView(self.cog, self.user, "coinflip", self.bet))

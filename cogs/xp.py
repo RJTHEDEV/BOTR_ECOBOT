@@ -80,6 +80,18 @@ class XP(commands.Cog):
         if user.premium_since:
             amount *= 2
 
+        # Check Premium Double XP perk
+        async with self.bot.db.execute("SELECT xp_boost_expiry FROM users WHERE user_id = ?", (user.id,)) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0]:
+                import datetime
+                expiry = datetime.datetime.fromisoformat(row[0])
+                if datetime.datetime.now() < expiry:
+                    amount *= 2
+                else:
+                    # Clear it if expired
+                    await self.bot.db.execute("UPDATE users SET xp_boost_expiry = NULL WHERE user_id = ?", (user.id,))
+
         async with self.bot.db.execute("SELECT xp, level FROM users WHERE user_id = ?", (user.id,)) as cursor:
             row = await cursor.fetchone()
             if not row:
