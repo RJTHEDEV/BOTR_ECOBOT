@@ -226,7 +226,7 @@ class CrimeView(discord.ui.View):
 
     @discord.ui.button(label="Bank Heist (Hard)", style=discord.ButtonStyle.red, emoji="🏦")
     async def btn_hard(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.process_work(interaction, "Fast Food Cashier", "🍔", 0.95, 30, 80)
+        await self.process_crime(interaction, "Bank Heist", 0.2, 2000, 5000, 1000, 2500)
 
 
 class BegView(discord.ui.View):

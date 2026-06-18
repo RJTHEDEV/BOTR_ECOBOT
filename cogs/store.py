@@ -155,20 +155,6 @@ class Store(commands.Cog):
 
         requirements = recipes[recipe_key]
         
-    @store_group.command(description="View all available crafting recipes.")
-    async def recipes(self, ctx):
-        await self.send_recipes_embed(ctx)
-
-    async def send_recipes_embed(self, ctx):
-        embed = discord.Embed(title="🛠️ Crafting Recipes", color=discord.Color.orange())
-        embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
-        embed.add_field(name="🖥️ Mining Rig", value="**Cost:** 10x Iron Ore, 5x Wood\n**Effect:** Generates $200 passive income every time you claim `/daily`.", inline=False)
-        embed.add_field(name="🔒 Safe", value="**Cost:** 10x Wood, 5x Magic Dust\n**Effect:** Protects your wallet! 80% chance to block robbers and fine them.", inline=False)
-        embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 2x Silicon Chip, 5x Wood, 10x Copper Wire\n**Effect:** Increases `/crime` success chance by 5% and payout by $100 per laptop.", inline=False)
-        embed.add_field(name="🗄️ Server Rack", value="**Cost:** 20x Silicon Chip, 50x Copper Wire, 10x Iron Ore\n**Effect:** Generates $1,000 passive income every time you claim `/daily`.", inline=False)
-        embed.add_field(name="🤖 Insider Bot", value="**Cost:** 10x Silicon Chip, 5x Gold Bar\n**Effect:** Generates 1 Ticket (🎟️) every time you claim `/daily`.", inline=False)
-        embed.add_field(name="🔓 Lockpick Set", value="**Cost:** 5x Iron Ore, 2x Copper Wire\n**Effect:** Automatically bypasses a victim's Safe when you `/rob` them. (Consumed on use).", inline=False)
-        await ctx.send(embed=embed)
         # Check inventory for requirements
         async with self.bot.db.execute("SELECT item_name, quantity FROM inventory WHERE user_id = ?", (ctx.author.id,)) as cursor:
             inv = await cursor.fetchall()
@@ -192,6 +178,21 @@ class Store(commands.Cog):
             
         await self.bot.db.commit()
         await ctx.send(f"🎉 **CRAFTING SUCCESS!** You constructed a **{crafted_item}**! It is now active in your inventory.")
+
+    @store_group.command(description="View all available crafting recipes.")
+    async def recipes(self, ctx):
+        await self.send_recipes_embed(ctx)
+
+    async def send_recipes_embed(self, ctx):
+        embed = discord.Embed(title="🛠️ Crafting Recipes", color=discord.Color.orange())
+        embed.description = "Buy raw materials in the store (`/store shop`) and craft them into powerful upgrades!\n\nUse `/store craft <recipe>` to build an item."
+        embed.add_field(name="🖥️ Mining Rig", value="**Cost:** 10x Iron Ore, 5x Wood\n**Effect:** Generates $200 passive income every time you claim `/daily`.", inline=False)
+        embed.add_field(name="🔒 Safe", value="**Cost:** 10x Wood, 5x Magic Dust\n**Effect:** Protects your wallet! 80% chance to block robbers and fine them.", inline=False)
+        embed.add_field(name="💻 Hacker Laptop", value="**Cost:** 2x Silicon Chip, 5x Wood, 10x Copper Wire\n**Effect:** Increases `/crime` success chance by 5% and payout by $100 per laptop.", inline=False)
+        embed.add_field(name="🗄️ Server Rack", value="**Cost:** 20x Silicon Chip, 50x Copper Wire, 10x Iron Ore\n**Effect:** Generates $1,000 passive income every time you claim `/daily`.", inline=False)
+        embed.add_field(name="🤖 Insider Bot", value="**Cost:** 10x Silicon Chip, 5x Gold Bar\n**Effect:** Generates 1 Ticket (🎟️) every time you claim `/daily`.", inline=False)
+        embed.add_field(name="🔓 Lockpick Set", value="**Cost:** 5x Iron Ore, 2x Copper Wire\n**Effect:** Automatically bypasses a victim's Safe when you `/rob` them. (Consumed on use).", inline=False)
+        await ctx.send(embed=embed)
 
 class ItemBuySelect(discord.ui.Select):
     def __init__(self, bot, category_items):
@@ -246,6 +247,28 @@ class ItemBuySelect(discord.ui.Select):
         await self.bot.db.commit()
         cost_str = f"**${price:,}**" if currency == "coins" else f"**🎟️ {price} tickets**"
         await interaction.response.send_message(f"✅ You successfully purchased **{item_name}** for {cost_str}! It has been added to your `/store inventory`.", ephemeral=True)
+
+    @store_group.command(name="buy_tickets", description="Purchase VIP Tickets with cryptocurrency (BTC, ETH, SOL).")
+    async def buy_tickets(self, ctx):
+        embed = discord.Embed(title="🎫 Purchase VIP Tickets", color=discord.Color.gold())
+        embed.description = (
+            "You can purchase **VIP Tickets (🎟️)** using cryptocurrency to unlock premium items, roles, and exclusive perks!\n\n"
+            "**Pricing:**\n"
+            "• 🎟️ 5 Tickets = $5.00\n"
+            "• 🎟️ 15 Tickets = $12.00 *(Best Value!)*\n"
+            "• 🎟️ 50 Tickets = $35.00 *(Whale Status!)*\n\n"
+            "**How to Buy:**\n"
+            "1. Send the equivalent crypto amount to one of the wallets below.\n"
+            "2. Open a support ticket in the server and provide your transaction hash/proof of payment.\n"
+            "3. An Admin will credit your account immediately."
+        )
+        
+        embed.add_field(name="🪙 Bitcoin (BTC)", value="`bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh`", inline=False)
+        embed.add_field(name="🔷 Ethereum (ETH / ERC-20)", value="`0x71C7656EC7ab88b098defB751B7401B5f6d8976F`", inline=False)
+        embed.add_field(name="🟣 Solana (SOL)", value="`HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH`", inline=False)
+        
+        embed.set_footer(text="Make sure you send on the correct network! Admins will manually verify your deposit.")
+        await ctx.send(embed=embed)
 
 class ShopSelect(discord.ui.Select):
     def __init__(self, bot, categories, view_instance):
