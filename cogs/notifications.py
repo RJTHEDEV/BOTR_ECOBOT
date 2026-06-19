@@ -30,6 +30,11 @@ class Notifications(commands.Cog):
             guild = self.bot.get_guild(guild_id)
             if not guild: return
             member = guild.get_member(discord_user_id)
+            if not member:
+                try:
+                    member = await guild.fetch_member(discord_user_id)
+                except:
+                    return
             if not member: return
             
             async with self.bot.db.execute("SELECT role_id FROM live_roles WHERE guild_id = ?", (guild_id,)) as cursor:
