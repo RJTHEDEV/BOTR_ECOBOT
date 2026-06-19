@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands, tasks
 import aiohttp
 import xml.etree.ElementTree as ET
+import json
+import re
 
 class Notifications(commands.Cog):
     def __init__(self, bot):
@@ -504,18 +506,46 @@ class Notifications(commands.Cog):
                         channel = self.bot.get_channel(discord_channel_id)
                         if channel:
                             url = f"https://www.tiktok.com/@{tiktok_username}/live"
+                            
+                            # Parse SIGI_STATE for rich embed
+                            stream_title = f"@{tiktok_username} is Live on TikTok!"
+                            cover_url = None
+                            avatar_url = None
+                            
+                            match = re.search(r'<script id="SIGI_STATE".*?>(.*?)</script>', text)
+                            if match:
+                                try:
+                                    data = json.loads(match.group(1))
+                                    live_room = data.get("LiveRoom", {}).get("liveRoomUserInfo", {})
+                                    user_data = live_room.get("user", {})
+                                    room_data = live_room.get("liveRoom", {})
+                                    
+                                    if room_data.get("title"):
+                                        stream_title = room_data.get("title")
+                                    if room_data.get("coverUrl"):
+                                        cover_url = room_data.get("coverUrl")
+                                    if user_data.get("avatarThumb"):
+                                        avatar_url = user_data.get("avatarThumb")
+                                except Exception:
+                                    pass
+                            
                             embed = discord.Embed(
-                                title=f"@{tiktok_username} is Live on TikTok!", 
+                                title=stream_title, 
                                 url=url, 
                                 color=0x000000,
                                 timestamp=discord.utils.utcnow()
                             )
-                            embed.set_author(name=f"@{tiktok_username} is LIVE on TikTok!", url=url)
+                            embed.set_author(name=f"@{tiktok_username}", icon_url=avatar_url or None, url=url)
+                            embed.add_field(name="Status", value="🔴 LIVE", inline=True)
+                            
+                            if cover_url:
+                                embed.set_image(url=cover_url)
+                            embed.set_footer(text="TikTok", icon_url="https://cdn.iconscout.com/icon/free/png-256/free-tiktok-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png")
                                 
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
-                            content = f"{custom_message}\n🔴 **@{tiktok_username}** is live now!"
+                            content = f"{custom_message}\n**@{tiktok_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
