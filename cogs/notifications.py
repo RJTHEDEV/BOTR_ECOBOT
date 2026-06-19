@@ -144,14 +144,14 @@ class Notifications(commands.Cog):
         await self.bot.wait_until_ready()
         
         try:
-            async with self.bot.db.execute("SELECT id, guild_id, channel_id, youtube_channel_id, last_video_id, custom_message FROM youtube_alerts") as cursor:
+            async with self.bot.db.execute("SELECT id, guild_id, channel_id, youtube_channel_id, last_video_id, discord_user_id, custom_message FROM youtube_alerts") as cursor:
                 alerts = await cursor.fetchall()
                 
             if not alerts: return
             
             async with aiohttp.ClientSession() as session:
                 for alert in alerts:
-                    db_id, guild_id, discord_channel_id, yt_channel_id, db_last_video_id, custom_message = alert
+                    db_id, guild_id, discord_channel_id, yt_channel_id, db_last_video_id, discord_user_id, custom_message = alert
                     
                     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={yt_channel_id}"
                     async with session.get(url) as resp:
@@ -210,7 +210,10 @@ class Notifications(commands.Cog):
                             view.add_item(discord.ui.Button(label="Watch Video", style=discord.ButtonStyle.link, url=link))
                             view.add_item(discord.ui.Button(label="Channel", style=discord.ButtonStyle.link, url=f"https://www.youtube.com/channel/{yt_channel_id}"))
                             
-                            content = f"{custom_message}\n🎉 **{author_name}** just posted a new video!"
+                            if discord_user_id:
+                                content = f"{custom_message}\n🎉 <@{discord_user_id}> just posted a new video!"
+                            else:
+                                content = f"{custom_message}\n🎉 **{author_name}** just posted a new video!"
                             await channel.send(content=content, embed=embed, view=view)
                             
         except Exception as e:
@@ -241,6 +244,42 @@ class Notifications(commands.Cog):
         await self.bot.db.execute("DELETE FROM twitch_alerts WHERE guild_id = ? AND twitch_username = ?", (ctx.guild.id, twitch_username.lower()))
         await self.bot.db.commit()
         await ctx.send(f"✅ Removed `{twitch_username}` from Twitch alerts.")
+
+    @notify_group.command(name="link_user", description="Link a Discord user to an existing alert (so they get pinged and get the Live role).")
+    @commands.has_permissions(administrator=True)
+    async def link_user(self, ctx, platform: str, streamer_username: str, discord_user: discord.Member):
+        platform = platform.lower()
+        if platform not in ["twitch", "youtube", "kick", "tiktok"]:
+            await ctx.send("❌ Platform must be one of: twitch, youtube, kick, tiktok.", ephemeral=True)
+            return
+            
+        table_map = {
+            "twitch": "twitch_alerts",
+            "youtube": "youtube_alerts",
+            "kick": "kick_alerts",
+            "tiktok": "tiktok_alerts"
+        }
+        
+        table = table_map[platform]
+        column = "twitch_username" if platform == "twitch" else "youtube_channel_id" if platform == "youtube" else "kick_username" if platform == "kick" else "tiktok_username"
+        
+        if platform == "youtube":
+            await ctx.send("For YouTube, please enter their channel ID instead of their username.", ephemeral=True)
+            # Keeping it simple, matching on the identifier
+            
+        # Check if the alert exists first
+        async with self.bot.db.execute(f"SELECT id FROM {table} WHERE guild_id = ? AND {column} = ?", (ctx.guild.id, streamer_username.lower() if platform != 'youtube' else streamer_username)) as cursor:
+            if not await cursor.fetchone():
+                await ctx.send(f"❌ Could not find a `{platform}` alert for `{streamer_username}`. Make sure you set up the alert first!", ephemeral=True)
+                return
+                
+        # Update it
+        await self.bot.db.execute(
+            f"UPDATE {table} SET discord_user_id = ? WHERE guild_id = ? AND {column} = ?",
+            (discord_user.id, ctx.guild.id, streamer_username.lower() if platform != 'youtube' else streamer_username)
+        )
+        await self.bot.db.commit()
+        await ctx.send(f"✅ Successfully linked {discord_user.mention} to the {platform.capitalize()} alert for `{streamer_username}`!\nThey will now be @-pinged and given the Auto-Live role when going live.")
 
     @tasks.loop(minutes=3.0)
     async def check_twitch(self):
@@ -334,7 +373,10 @@ class Notifications(commands.Cog):
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
-                            content = f"{custom_message}\n🔴 **{twitch_username}** is live now!"
+                            if discord_user_id:
+                                content = f"{custom_message}\n🔴 <@{discord_user_id}> is live now!"
+                            else:
+                                content = f"{custom_message}\n🔴 **{twitch_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
@@ -428,7 +470,10 @@ class Notifications(commands.Cog):
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
-                            content = f"{custom_message}\n🟢 **{kick_username}** is live now!"
+                            if discord_user_id:
+                                content = f"{custom_message}\n🟢 <@{discord_user_id}> is live now!"
+                            else:
+                                content = f"{custom_message}\n🟢 **{kick_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
@@ -550,7 +595,10 @@ class Notifications(commands.Cog):
                             view = discord.ui.View()
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
-                            content = f"{custom_message}\n**@{tiktok_username}** is live now!"
+                            if discord_user_id:
+                                content = f"{custom_message}\n🔴 <@{discord_user_id}> is live now!"
+                            else:
+                                content = f"{custom_message}\n**@{tiktok_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
@@ -592,7 +640,10 @@ class Notifications(commands.Cog):
                                             view = discord.ui.View()
                                             view.add_item(discord.ui.Button(label="Watch Video", style=discord.ButtonStyle.link, url=url))
                                             
-                                            content = f"{custom_message}\n🎵 **@{tiktok_username}** just posted a new TikTok!"
+                                            if discord_user_id:
+                                                content = f"{custom_message}\n🎵 <@{discord_user_id}> just posted a new TikTok!"
+                                            else:
+                                                content = f"{custom_message}\n🎵 **@{tiktok_username}** just posted a new TikTok!"
                                             await channel.send(content=content, embed=embed, view=view)
                     except Exception as e:
                         print(f"TikTok Video check failed for {tiktok_username}: {e}")
