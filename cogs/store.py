@@ -96,6 +96,17 @@ class Store(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error adding item: {e}")
 
+    @store_group.command(description="Admin: Remove an item from the shop.")
+    @commands.has_permissions(administrator=True)
+    async def removeitem(self, ctx, *, name: str):
+        try:
+            async with self.bot.db.execute("DELETE FROM store WHERE name = ?", (name,)) as cursor:
+                pass
+            await self.bot.db.commit()
+            await ctx.send(f"Removed **{name}** from the store. Note: it might still be in people's inventories.")
+        except Exception as e:
+            await ctx.send(f"Error removing item: {e}")
+
     @store_group.command(description="Admin: Auto-populate the store with a full community setup.")
     @commands.has_permissions(administrator=True)
     async def populate(self, ctx):
