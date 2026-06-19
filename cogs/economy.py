@@ -662,12 +662,28 @@ class Economy(commands.Cog):
             await ctx.send("You can't rob them.")
             return
 
+        async with self.bot.db.execute("SELECT balance, wanted_level FROM users WHERE user_id = ?", (ctx.author.id,)) as cursor:
+            row = await cursor.fetchone()
+            attacker_bal = row[0] if row else 0
+            wanted_level = row[1] if row else 0
+
+        if wanted_level >= 5 and random.random() < 0.5:
+            # 50% chance to get busted instantly if 5 stars
+            fine = int(attacker_bal * 0.25) # lose 25% of cash
+            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?), wanted_level = 0 WHERE user_id = ?", (fine, ctx.author.id))
+            await self.bot.db.commit()
+            await self.log_transaction(ctx.author.id, "busted", -fine, "Arrested before robbery")
+            
+            embed = discord.Embed(title="🚓 BUSTED!", description=f"The police recognized you because of your **5-Star Wanted Level** before you could even attempt the robbery!\n\nYou paid a **${fine:,}** fine and your wanted level was cleared.", color=discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+
         async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (target.id,)) as cursor:
             row = await cursor.fetchone()
             target_bal = row[0] if row else 0
 
         if target_bal < 100:
-            await ctx.send("They don't have enough coins to rob.")
+            await ctx.send(f"❌ {target.display_name} doesn't have enough coins to rob.")
             return
 
         # Check for Safe
@@ -675,37 +691,55 @@ class Economy(commands.Cog):
             row = await cursor.fetchone()
             has_safe = row and row[0] > 0
             
+        embed = discord.Embed(title="🥷 Robbery Attempt", color=discord.Color.dark_theme())
+        
         if has_safe:
             async with self.bot.db.execute("SELECT quantity FROM inventory WHERE user_id = ? AND item_name = 'Lockpick Set'", (ctx.author.id,)) as cursor:
                 row = await cursor.fetchone()
                 has_lockpick = row and row[0] > 0
                 
             if has_lockpick:
-                await ctx.send("🔓 **Lockpick Used!** You silently bypassed their Safe!")
+                embed.add_field(name="Item Used", value="🔓 **Lockpick Set** consumed to bypass their Safe!", inline=False)
                 await self.bot.db.execute("UPDATE inventory SET quantity = quantity - 1 WHERE user_id = ? AND item_name = 'Lockpick Set'", (ctx.author.id,))
-                await self.bot.db.commit()
             elif random.random() < 0.8: # 80% fail if Safe
                 fine = random.randint(200, 1000)
-                await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+                fine = int(fine * (1 + (wanted_level * 0.5))) # Wanted level multiplier
+                
+                await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?), wanted_level = MIN(5, wanted_level + 1) WHERE user_id = ?", (fine, ctx.author.id))
                 await self.bot.db.commit()
                 await self.log_transaction(ctx.author.id, "rob", -fine, "Robbery failed (Safe Alarm)")
-                await ctx.send(f"🔒 **Safe Protected!** You triggered the alarm and paid a **${fine}** fine.")
+                
+                embed.color = discord.Color.red()
+                embed.description = f"🔒 **Safe Protected!** You triggered the alarm and fled!\n\n**Fine Paid:** ${fine:,}\n**Wanted Level:** ⭐ {min(5, wanted_level + 1)}"
+                await ctx.send(embed=embed)
                 return
 
-        if random.random() < 0.4: # 40% success
+        success_chance = 0.4 # 40% base success
+        
+        if random.random() < success_chance:
             steal_amount = random.randint(int(target_bal * 0.1), int(target_bal * 0.5))
             await self.bot.db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (steal_amount, target.id))
             await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (steal_amount, ctx.author.id))
             await self.bot.db.commit()
+            
             await self.log_transaction(target.id, "rob", -steal_amount, f"Robbed by {ctx.author.display_name}")
             await self.log_transaction(ctx.author.id, "rob", steal_amount, f"Robbed {target.display_name}")
-            await ctx.send(f"😈 You robbed {target.mention} and stole **${steal_amount}**!")
+            
+            embed.color = discord.Color.green()
+            embed.description = f"😈 You successfully robbed {target.mention}!\n\n**Stolen Amount:** ${steal_amount:,}"
+            await ctx.send(embed=embed)
         else:
             fine = random.randint(100, 500)
-            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE user_id = ?", (fine, ctx.author.id))
+            fine = int(fine * (1 + (wanted_level * 0.5)))
+            
+            await self.bot.db.execute("UPDATE users SET balance = MAX(0, balance - ?), wanted_level = MIN(5, wanted_level + 1) WHERE user_id = ?", (fine, ctx.author.id))
             await self.bot.db.commit()
+            
             await self.log_transaction(ctx.author.id, "rob", -fine, f"Robbery failed - Target: {target.display_name}")
-            await ctx.send(f"🛡️ You failed to rob {target.mention} and paid a fine of **${fine}**.")
+            
+            embed.color = discord.Color.red()
+            embed.description = f"🛡️ You were caught trying to rob {target.mention}!\n\n**Fine Paid:** ${fine:,}\n**Wanted Level:** ⭐ {min(5, wanted_level + 1)}"
+            await ctx.send(embed=embed)
 
     # --- Social ---
     @commands.hybrid_command(description="Give a reputation point to a user (24h cooldown).")
