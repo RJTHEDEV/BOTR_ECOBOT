@@ -4,6 +4,7 @@ import aiohttp
 import xml.etree.ElementTree as ET
 import json
 import re
+import os
 
 class Notifications(commands.Cog):
     def __init__(self, bot):
@@ -181,11 +182,31 @@ class Notifications(commands.Cog):
                         
                         media_group = entry.find('media:group', ns)
                         thumbnail_url = ""
+                        description = ""
+                        
                         if media_group is not None:
                             thumbnail = media_group.find('media:thumbnail', ns)
                             if thumbnail is not None:
                                 thumbnail_url = thumbnail.attrib['url']
-                                
+                            
+                            desc_elem = media_group.find('media:description', ns)
+                            if desc_elem is not None and desc_elem.text:
+                                description = desc_elem.text[:200] + "..." if len(desc_elem.text) > 200 else desc_elem.text
+
+                        # Fetch channel avatar using YouTube Data API if available
+                        avatar_url = "https://upload.wikimedia.org/wikipedia/commons/e/ef/Youtube_logo_2015.jpg"
+                        api_key = os.getenv("YOUTUBE_API_KEY")
+                        if api_key:
+                            try:
+                                api_url = f"https://www.googleapis.com/youtube/v3/channels?part=snippet&id={yt_channel_id}&key={api_key}"
+                                async with session.get(api_url) as api_resp:
+                                    if api_resp.status == 200:
+                                        api_data = await api_resp.json()
+                                        if api_data.get('items'):
+                                            avatar_url = api_data['items'][0]['snippet']['thumbnails']['high']['url']
+                            except Exception as e:
+                                print(f"Failed to fetch YouTube avatar: {e}")
+
                         # Update DB
                         await self.bot.db.execute("UPDATE youtube_alerts SET last_video_id = ? WHERE id = ?", (video_id, db_id))
                         await self.bot.db.commit()
@@ -195,11 +216,12 @@ class Notifications(commands.Cog):
                         if channel:
                             embed = discord.Embed(
                                 title=title, 
+                                description=description,
                                 url=link, 
                                 color=0xFF0000,
                                 timestamp=discord.utils.utcnow()
                             )
-                            embed.set_author(name=author_name, icon_url="https://upload.wikimedia.org/wikipedia/commons/e/ef/Youtube_logo_2015.jpg", url=f"https://www.youtube.com/channel/{yt_channel_id}")
+                            embed.set_author(name=author_name, icon_url=avatar_url, url=f"https://www.youtube.com/channel/{yt_channel_id}")
                             
                             if thumbnail_url:
                                 embed.set_image(url=thumbnail_url)
