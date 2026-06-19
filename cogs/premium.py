@@ -23,7 +23,7 @@ class Premium(commands.Cog):
             "Includes 50 Tickets instantly, +1 Ticket every day you `/daily`, and a custom profile badge!\n\n"
             "*(To purchase using Crypto (BTC, ETH, SOL, etc.) or CashApp/PayPal, please open a Support Ticket or contact an Admin!)*"
         )
-        embed.set_footer(text="Thank you for supporting JJonWallStreet!")
+        embed.set_footer(text="Thank you for supporting AWT!")
         
         await ctx.send(embed=embed)
 

@@ -1,0 +1,264 @@
+
+### Alerts
+- /alert - Admin: Post a trade alert.
+
+### Automod
+- /automod - Configure AutoMod settings.
+- /blockword - Add a word to the banned words filter.
+- /view - View AutoMod configuration.
+
+### Clans
+- /clan - Manage your Clan.
+- /create - Create a new Clan (Cost: $10,000)
+- /info - View info about a clan.
+- /invite - Invite a user to your clan (Owner only).
+- /leave - Leave your current clan.
+
+### Community
+- /add - Admin: Add an event to the schedule.
+- /autorole - Manage auto role settings.
+- /badge - Get info on how to claim the Active Developer Badge.
+- /birthday - Manage birthdays.
+- /buttonroles - Create a button-based reaction role menu.
+- /community - No description
+- /end - Admin: End a raffle early.
+- /enter - Enter the current raffle.
+- /gend - Admin: End a giveaway early.
+- /greroll - Admin: Reroll a giveaway winner.
+- /gstart - Admin: Start a giveaway.
+- /list - List upcoming birthdays.
+- /news - Admin: Post a news update.
+- /raffle - Manage raffles.
+- /remove - Remove the auto role.
+- /schedule - Manage streaming schedule.
+- /set - Set the auto role for new members.
+- /set - Set the welcome channel.
+- /set - Set your birthday (MM-DD).
+- /start - Admin: Start a raffle.
+- /test - Test the welcome message.
+- /view - View upcoming events.
+- /welcome - Manage welcome messages.
+
+### Config
+- /config - Manage server settings.
+- /set_log - Set the logging channel.
+- /set_roles - Set auto-role and live-role.
+- /set_starboard - Configure starboard settings.
+- /view - View current server settings.
+
+### Copy_trading
+- /copytrade - Manage copy trading subscriptions.
+- /subscribe - Subscribe to automatically mirror a user's paper trades.
+- /unsubscribe - Unsubscribe from a user's paper trades.
+
+### Crafting
+- /craft - Craft an item.
+- /recipes - View crafting recipes.
+- /trade - Trade an item with another user.
+
+### Custom_commands
+- /add - Add a new custom command.
+- /customcmd - Manage custom commands/auto-responders.
+- /list - List all custom commands.
+- /remove - Remove a custom command.
+
+### Economy
+- /balance - Check your coin and ticket balance.
+- /beg - Beg for some coins on the streets (5m cooldown).
+- /bounty - Bounty hunt a wanted criminal!
+- /crime - Commit a crime (High risk/reward) (2h cooldown).
+- /currencylog - View your currency transaction history.
+- /daily - Claim your daily reward.
+- /deposit - Deposit coins into your bank.
+- /give - Admin: Give coins to a user.
+- /givetickets - Admin: Give tickets to a user.
+- /leaderboard - View the interactive Global Leaderboards.
+- /pay - Pay coins to another user.
+- /rep - Give a reputation point to a user (24h cooldown).
+- /rob - Rob another user (Chance to fail).
+- /search - Search for coins (15m cooldown).
+- /tickets - Check your ticket balance.
+- /use - Use a consumable item from your inventory.
+- /withdraw - Withdraw coins from your bank.
+- /work - Work to earn some coins (1h cooldown).
+
+### External
+- /marketnews - Get top news headlines.
+- /tweet - Admin: Post a tweet.
+
+### Gambling
+- /casino - Open the Casino Lobby.
+- /lobby - Open the main Casino Lobby.
+
+### Games
+- /8ball - Ask the Magic 8 Ball a question.
+- /connect4 - Play Connect 4 with another user.
+- /tictactoe - Play Tic-Tac-Toe with another user.
+
+### Giveaways
+- /giveaway - Start a new giveaway.
+
+### Help
+- /help - Show the help menu.
+
+### Lfg
+- /lfg - Start a Looking For Group (LFG) request.
+
+### Logging
+- /add - Ignore a channel or user.
+- /disable - Disable logging for a category.
+- /ignore - Manage ignored channels/users.
+- /list - List ignored items.
+- /log - Manage logging settings.
+- /set - Set a logging channel for a specific category.
+
+### Maintenance
+- /backup - Manually trigger a database backup.
+
+### Market
+- /add - Add a ticker to your watchlist.
+- /buy - Set a limit buy order.
+- /calendar - View today's economic calendar (ForexFactory).
+- /cancel - Cancel an order.
+- /chart - View a candlestick chart.
+- /crypto - Get real-time crypto price (CoinGecko).
+- /limit - Manage limit orders.
+- /list - List your active alerts.
+- /marketnews - Get news and sentiment for a ticker.
+- /movers - View top market movers.
+- /orders - View your active orders.
+- /p - Get real-time price for a ticker.
+- /portfolio - View your portfolio performance.
+- /pricealert - Manage price alerts.
+- /remove - Remove a ticker from your watchlist.
+- /remove - Remove an alert by ID.
+- /sell - Set a limit sell order.
+- /set - Set a price alert.
+- /wl - Manage your watchlist.
+
+### Moderation
+- /add - Add a role to all humans.
+- /all - Bulk role management.
+- /ban - Ban a user.
+- /history - View user infraction history.
+- /kick - Kick a user.
+- /lockdown - Lockdown the current channel.
+- /mod - No description
+- /mute - Timeout (mute) a user.
+- /nick - Change a user's nickname.
+- /purge - Clear multiple messages.
+- /remove - Remove a role from all humans.
+- /role - Manage roles.
+- /say - Make the bot say something.
+- /slowmode - Set channel slowmode.
+- /snipe - Snipe the last deleted message.
+- /softban - Softban a user (ban and unban to clear messages).
+- /unban - Unban a user by ID.
+- /unlock - Unlock the current channel.
+- /unmute - Remove timeout from a user.
+- /warn - Warn a user.
+
+### Music
+- /join - Join the voice channel.
+- /music - No description
+- /pause - Pause the currently playing audio.
+- /play - Play audio from a YouTube URL or search query.
+- /resume - Resume the currently paused audio.
+- /stop - Stop the music and leave the voice channel.
+
+### Notifications
+- /alerts - Setup automated notifications for content creators.
+- /kick - Add a Kick streamer to post notifications for.
+- /list - List all active content alerts in this server.
+- /remove_kick - Stop monitoring a Kick streamer.
+- /remove_tiktok - Stop monitoring a TikTok streamer.
+- /remove_twitch - Stop monitoring a Twitch streamer.
+- /remove_youtube - Stop monitoring a YouTube channel.
+- /set_live_role - Set a role to automatically give to users when they stream on Discord.
+- /tiktok - Add a TikTok streamer to post notifications for.
+- /twitch - Add a Twitch streamer to post notifications for.
+- /youtube - Add a YouTube channel to post notifications for.
+
+### Options
+- /buy - Buy a Call or Put option with live market data.
+- /calc_bs - Black-Scholes Options Pricing Model
+- /calc_greeks - Calculate Option Greeks (Delta, Gamma, Theta)
+- /exercise - Exercise an In-The-Money option for profit.
+- /list - List your active options portfolio.
+- /options - Advanced Options Trading & Calculators
+
+### Paper_trading
+- /tbuy - Buy stocks (simulated).
+- /tportfolio - View your paper trading portfolio.
+- /tsell - Sell stocks (simulated).
+
+### Pets
+- /buy - Buy a pet from the shop.
+- /feed - Feed a specific pet to restore its hunger.
+- /info - Check your pets' status.
+- /pet - Manage your virtual pet.
+- /shop - View the pet shop.
+
+### Polls
+- /endpoll - End a poll early.
+- /poll - Create a native poll.
+
+### Premium
+- /grant_tickets - Admin: Grant tickets to a user after a manual purchase.
+- /perks - Spend your Tickets on Premium Perks!
+- /premium - Premium options and ticket store.
+- /store - View the premium ticket store.
+
+### Quests
+- /quest - View your daily quest.
+
+### Reminders
+- /remindme - Set a reminder (e.g. 'check stocks').
+
+### Sportsbook
+- /bet - Manage custom bets and predictions.
+- /create - Create a custom bet (Streamers/Admins).
+- /resolve - Resolve a bet and payout winners.
+
+### Store
+- /additem - Admin: Add an item to the shop.
+- /buy - Buy an item from the shop.
+- /buy_tickets - Purchase VIP Tickets with cryptocurrency (BTC, ETH, SOL).
+- /craft - Craft special items using raw materials from the store. Leave blank to view recipes.
+- /inventory - View your inventory.
+- /populate - Admin: Auto-populate the store with a full community setup.
+- /recipes - View all available crafting recipes.
+- /shop - View items in the shop.
+- /store - No description
+
+### Stream_schedule
+- /in - Set a countdown to your next stream. (e.g. 2 hours, 30 minutes)
+- /stream_schedule - Manage your stream schedule.
+
+### Tickets
+- /add - Add a user to the ticket.
+- /claim - Claim this ticket.
+- /close - Close the current ticket.
+- /create - Create a new ticket panel.
+- /panel - Manage ticket panels.
+- /remove - Remove a user from the ticket.
+
+### Trivia
+- /trivia - Start a quick trivia game!
+
+### Utility
+- /avatar - Get a user's avatar.
+- /serverinfo - Get information about the server.
+- /userinfo - Get information about a user.
+
+### Vip
+- /setup - Set a VIP role and its economy multiplier.
+- /vip - VIP and Subscription Perks.
+
+### Voice
+- /setup - Set a voice channel as a 'Join to Create' hub.
+- /voice - Manage voice channels.
+
+### Xp
+- /compare - Compare your stats with another user.
+- /profile - View user profile.
