@@ -50,6 +50,30 @@ class Quests(commands.Cog):
         
         await ctx.send(embed=embed)
 
+    async def add_quest_progress(self, user: discord.Member, q_type: str):
+        today = datetime.date.today().isoformat()
+        
+        async with self.bot.db.execute("SELECT target, progress, completed FROM quests WHERE user_id = ? AND quest_type = ? AND date_assigned = ?", (user.id, q_type, today)) as cursor:
+            row = await cursor.fetchone()
+            
+        if row:
+            target, progress, completed = row
+            if not completed:
+                progress += 1
+                if progress >= target:
+                    # Completed
+                    reward = QUEST_TYPES[q_type]["reward"]
+                    await self.bot.db.execute("UPDATE quests SET progress = ?, completed = 1 WHERE user_id = ?", (progress, user.id))
+                    await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user.id))
+                    await self.bot.db.commit()
+                    
+                    try:
+                        await user.send(f"🎉 **Quest Completed!** You finished your daily quest to '{QUEST_TYPES[q_type]['desc']}' and earned **${reward}**!")
+                    except: pass
+                else:
+                    await self.bot.db.execute("UPDATE quests SET progress = ? WHERE user_id = ?", (progress, user.id))
+                    await self.bot.db.commit()
+
     @commands.Cog.listener()
     async def on_command_completion(self, ctx):
         if ctx.author.bot: return
@@ -67,28 +91,7 @@ class Quests(commands.Cog):
         
         if not q_type: return
         
-        today = datetime.date.today().isoformat()
-        
-        async with self.bot.db.execute("SELECT target, progress, completed FROM quests WHERE user_id = ? AND quest_type = ? AND date_assigned = ?", (ctx.author.id, q_type, today)) as cursor:
-            row = await cursor.fetchone()
-            
-        if row:
-            target, progress, completed = row
-            if not completed:
-                progress += 1
-                if progress >= target:
-                    # Completed
-                    reward = QUEST_TYPES[q_type]["reward"]
-                    await self.bot.db.execute("UPDATE quests SET progress = ?, completed = 1 WHERE user_id = ?", (progress, ctx.author.id))
-                    await self.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, ctx.author.id))
-                    await self.bot.db.commit()
-                    
-                    try:
-                        await ctx.author.send(f"🎉 **Quest Completed!** You finished your daily quest to '{QUEST_TYPES[q_type]['desc']}' and earned **${reward}**!")
-                    except: pass
-                else:
-                    await self.bot.db.execute("UPDATE quests SET progress = ? WHERE user_id = ?", (progress, ctx.author.id))
-                    await self.bot.db.commit()
+        await self.add_quest_progress(ctx.author, q_type)
 
 async def setup(bot):
     await bot.add_cog(Quests(bot))

@@ -25,6 +25,11 @@ class PlayAgainView(discord.ui.View):
         
         await self.cog.update_balance(self.user.id, -self.bet, f"Casino Bet ({self.game_choice})")
         
+        # Track Gambling Quest
+        quests_cog = self.cog.bot.get_cog("Quests")
+        if quests_cog:
+            await quests_cog.add_quest_progress(self.user, "gamble")
+        
         for item in self.children: item.disabled = True
         try: await interaction.message.edit(view=self)
         except: pass
@@ -251,6 +256,11 @@ class CasinoBetModal(discord.ui.Modal):
         
         # Deduct bet for games
         await self.cog.update_balance(interaction.user.id, -bet, f"Casino Bet ({self.game_choice})")
+        
+        # Track Gambling Quest
+        quests_cog = self.cog.bot.get_cog("Quests")
+        if quests_cog:
+            await quests_cog.add_quest_progress(interaction.user, "gamble")
         
         if self.game_choice == "blackjack":
             await self.cog.start_blackjack(interaction.channel, interaction.user, bet)
