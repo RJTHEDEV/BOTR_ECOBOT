@@ -80,6 +80,12 @@ class XP(commands.Cog):
         if user.premium_since:
             amount *= 2
 
+        # Clan XP Buff (+10%)
+        async with self.bot.db.execute("SELECT c.xp_buff FROM clans c JOIN clan_members m ON c.id = m.clan_id WHERE m.user_id = ?", (user.id,)) as cursor:
+            clan_row = await cursor.fetchone()
+        if clan_row and clan_row[0] > 0:
+            amount = int(amount * 1.10)
+
         # Check Premium Double XP perk
         async with self.bot.db.execute("SELECT xp_boost_expiry FROM users WHERE user_id = ?", (user.id,)) as cursor:
             row = await cursor.fetchone()
@@ -151,6 +157,10 @@ class XP(commands.Cog):
                 await ctx.send("User has no profile.")
                 return
             bal, bank, xp, level, rep = row
+            
+        async with self.bot.db.execute("SELECT c.name FROM clans c JOIN clan_members m ON c.id = m.clan_id WHERE m.user_id = ?", (user.id,)) as cursor:
+            clan_row = await cursor.fetchone()
+            clan_name = clan_row[0] if clan_row else "None"
         
         embed = discord.Embed(title=f"{user.display_name}'s Profile", color=discord.Color.purple())
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -159,6 +169,7 @@ class XP(commands.Cog):
         embed.add_field(name="📈 Net Worth", value=f"${bal + bank}", inline=True)
         embed.add_field(name="⭐ Reputation", value=f"{rep}", inline=True)
         embed.add_field(name="📊 Level", value=f"{level} (XP: {xp})", inline=True)
+        embed.add_field(name="🛡️ Clan", value=clan_name, inline=True)
         
         await ctx.send(embed=embed)
 

@@ -604,11 +604,11 @@ class Notifications(commands.Cog):
                             embed = discord.Embed(
                                 title=stream_title, 
                                 url=url, 
-                                color=0x000000,
+                                color=0xFE2C55, # TikTok Pink
                                 timestamp=discord.utils.utcnow()
                             )
                             embed.set_author(name=f"@{tiktok_username}", icon_url=avatar_url or None, url=url)
-                            embed.add_field(name="Status", value="🔴 LIVE", inline=True)
+                            embed.add_field(name="Status", value="🔴 LIVE NOW", inline=True)
                             
                             if cover_url:
                                 embed.set_image(url=cover_url)
@@ -620,7 +620,7 @@ class Notifications(commands.Cog):
                             if discord_user_id:
                                 content = f"{custom_message}\n🔴 <@{discord_user_id}> is live now!"
                             else:
-                                content = f"{custom_message}\n**@{tiktok_username}** is live now!"
+                                content = f"{custom_message}\n🔴 **@{tiktok_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
                             
                     elif not is_live_now and db_is_live:
@@ -641,7 +641,13 @@ class Notifications(commands.Cog):
                                         # NEW VIDEO UPLOADED
                                         title = video.get('title', f"New TikTok from @{tiktok_username}")
                                         play_count = video.get('play_count', 0)
+                                        digg_count = video.get('digg_count', 0)
+                                        comment_count = video.get('comment_count', 0)
                                         cover_url = video.get('cover', '')
+                                        
+                                        author_info = video.get('author', {})
+                                        avatar_url = author_info.get('avatar', 'https://cdn.iconscout.com/icon/free/png-256/free-tiktok-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png')
+                                        nickname = author_info.get('nickname', f"@{tiktok_username}")
                                         
                                         await self.bot.db.execute("UPDATE tiktok_alerts SET last_video_id = ? WHERE id = ?", (video_id, db_id))
                                         await self.bot.db.commit()
@@ -652,11 +658,18 @@ class Notifications(commands.Cog):
                                             embed = discord.Embed(
                                                 title=title, 
                                                 url=url, 
-                                                color=0x000000,
+                                                color=0xFE2C55, # TikTok Pink
                                                 timestamp=discord.utils.utcnow()
                                             )
-                                            embed.set_author(name=f"@{tiktok_username}", url=f"https://www.tiktok.com/@{tiktok_username}")
-                                            if cover_url: embed.set_image(url=cover_url)
+                                            embed.set_author(name=f"{nickname} (@{tiktok_username})", icon_url=avatar_url, url=f"https://www.tiktok.com/@{tiktok_username}")
+                                            
+                                            if cover_url: 
+                                                embed.set_image(url=cover_url)
+                                                
+                                            embed.add_field(name="👀 Views", value=f"{play_count:,}", inline=True)
+                                            embed.add_field(name="❤️ Likes", value=f"{digg_count:,}", inline=True)
+                                            embed.add_field(name="💬 Comments", value=f"{comment_count:,}", inline=True)
+                                            
                                             embed.set_footer(text="TikTok", icon_url="https://cdn.iconscout.com/icon/free/png-256/free-tiktok-logo-icon-download-in-svg-png-gif-file-formats--social-media-company-brand-pack-logos-icons-2674087.png")
                                                 
                                             view = discord.ui.View()
@@ -665,7 +678,7 @@ class Notifications(commands.Cog):
                                             if discord_user_id:
                                                 content = f"{custom_message}\n🎵 <@{discord_user_id}> just posted a new TikTok!"
                                             else:
-                                                content = f"{custom_message}\n🎵 **@{tiktok_username}** just posted a new TikTok!"
+                                                content = f"{custom_message}\n🎵 **{nickname}** (@{tiktok_username}) just posted a new TikTok!"
                                             await channel.send(content=content, embed=embed, view=view)
                     except Exception as e:
                         print(f"TikTok Video check failed for {tiktok_username}: {e}")

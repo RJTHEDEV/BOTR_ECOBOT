@@ -144,7 +144,12 @@ class WorkView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
             return
 
-        earnings = int(random.randint(min_pay, max_pay) * mult)
+        # Apply clan coin buff
+        async with self.cog.bot.db.execute("SELECT c.coin_buff FROM clans c JOIN clan_members m ON c.id = m.clan_id WHERE m.user_id = ?", (self.user.id,)) as cursor:
+            clan_row = await cursor.fetchone()
+        
+        coin_buff_mult = 1.10 if clan_row and clan_row[0] > 0 else 1.0
+        earnings = int(random.randint(min_pay, max_pay) * mult * coin_buff_mult)
         
         await self.cog.bot.db.execute("UPDATE users SET balance = balance + ?, work_shifts = work_shifts + 1 WHERE user_id = ?", (earnings, self.user.id))
         await self.cog.bot.db.commit()
@@ -247,8 +252,13 @@ class BegView(discord.ui.View):
             
         embed = discord.Embed(title="🤲 Begging on the Streets", color=discord.Color.gold())
         
+        # Apply clan coin buff
+        async with self.cog.bot.db.execute("SELECT c.coin_buff FROM clans c JOIN clan_members m ON c.id = m.clan_id WHERE m.user_id = ?", (self.user.id,)) as cursor:
+            clan_row = await cursor.fetchone()
+        
+        coin_buff_mult = 1.10 if clan_row and clan_row[0] > 0 else 1.0
         if random.random() < success_chance:
-            earnings = random.randint(min_reward, max_reward)
+            earnings = int(random.randint(min_reward, max_reward) * coin_buff_mult)
             await self.cog.bot.db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (earnings, self.user.id))
             await self.cog.bot.db.commit()
             await self.cog.log_transaction(self.user.id, "beg", earnings, f"Begged {target_name} successfully")
@@ -447,6 +457,15 @@ class Economy(commands.Cog):
                 streak_bonus = effective_streak * 50
                 total_amount = base_amount + level_bonus + streak_bonus + rig_bonus + server_bonus + penthouse_bonus + island_bonus
                 
+                # Apply clan coin buff
+                async with self.bot.db.execute("SELECT c.coin_buff FROM clans c JOIN clan_members m ON c.id = m.clan_id WHERE m.user_id = ?", (ctx.author.id,)) as cursor:
+                    clan_row = await cursor.fetchone()
+                
+                clan_buff_bonus = 0
+                if clan_row and clan_row[0] > 0:
+                    clan_buff_bonus = int(total_amount * 0.10)
+                    total_amount += clan_buff_bonus
+                
                 await self.bot.db.execute("UPDATE users SET balance = balance + ?, tickets = tickets + ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
                                           (total_amount, ticket_bonus, today, streak, ctx.author.id))
                 await self.log_transaction(ctx.author.id, "daily", total_amount, f"Daily reward (Streak: {streak})")
@@ -468,6 +487,8 @@ class Economy(commands.Cog):
             embed.add_field(name="Private Islands", value=f"${island_bonus} 🏝️", inline=True)
         if ticket_bonus > 0:
             embed.add_field(name="Insider Bots", value=f"🎟️ {ticket_bonus}", inline=True)
+        if clan_buff_bonus > 0:
+            embed.add_field(name="Clan Buff", value=f"${clan_buff_bonus} 🛡️", inline=True)
             
         embed.add_field(name="Total", value=f"**${total_amount}**", inline=False)
         

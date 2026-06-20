@@ -567,13 +567,20 @@ class BOTR(commands.Bot):
                 )
             ''')
             # Clans Table
+            try: await cursor.execute("ALTER TABLE clans ADD COLUMN xp_buff INTEGER DEFAULT 0")
+            except: pass
+            try: await cursor.execute("ALTER TABLE clans ADD COLUMN coin_buff INTEGER DEFAULT 0")
+            except: pass
+            
             await cursor.execute('''
                 CREATE TABLE IF NOT EXISTS clans (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE,
                     owner_id INTEGER,
                     bank INTEGER DEFAULT 0,
-                    level INTEGER DEFAULT 1
+                    level INTEGER DEFAULT 1,
+                    xp_buff INTEGER DEFAULT 0,
+                    coin_buff INTEGER DEFAULT 0
                 )
             ''')
             await cursor.execute('''

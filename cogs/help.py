@@ -111,14 +111,75 @@ class Help(commands.Cog):
             # Add standalone commands
             mapping[None] = [c for c in self.bot.commands if c.cog is None]
         
-        print(f"Mapping keys: {mapping.keys()}")
-        
         view = HelpView(self.bot, mapping)
         
-        embed = Embeds.default("🤖 ALL WITH TIME Help", "Select a category below to view commands.")
+        embed = Embeds.default("🤖 Bot Help Menu", "Select a category below to view detailed commands.")
         embed.add_field(name="Stats", value=f"Servers: {len(self.bot.guilds)}\nLatency: {round(self.bot.latency * 1000)}ms")
         
         await ctx.send(embed=embed, view=view)
+
+    @commands.hybrid_command(name="commands", aliases=["cmds", "commandlist"], description="View a clean, professional list of all available bot commands.")
+    async def commands_list(self, ctx):
+        try:
+            mapping = self.bot.help_command.get_bot_mapping()
+        except AttributeError:
+            mapping = {cog: cog.get_commands() for cog in self.bot.cogs.values()}
+            mapping[None] = [c for c in self.bot.commands if c.cog is None]
+            
+        embed = discord.Embed(
+            title="📋 Master Command List", 
+            description="Here is a clean and categorized list of everything I can do. For more details, use `/help`.", 
+            color=discord.Color.from_rgb(43, 45, 49) # Clean Discord dark theme color
+        )
+        
+        # Premium emojis for known cogs
+        emojis = {
+            "Economy": "💰", "Market": "📈", "Community": "🤝", "Moderation": "🛡️", 
+            "Polls": "📊", "Gambling": "🎰", "Store": "🛒", "Tickets": "🎫", 
+            "Streamers": "📺", "Clans": "🛡️", "XP": "⭐", "Leveling": "📈",
+            "Sportsbook": "🏀", "Games": "🎮", "Notifications": "🔔",
+            "CustomCommands": "⚙️", "Blackjack": "🃏"
+        }
+        
+        # Sort cogs alphabetically, pushing None to the end
+        sorted_cogs = sorted([c for c in mapping.keys() if c], key=lambda c: c.qualified_name)
+        
+        for cog in sorted_cogs:
+            commands_list = mapping[cog]
+            if not commands_list: continue
+            
+            # Filter visible commands
+            visible_cmds = [cmd for cmd in commands_list if not cmd.hidden]
+            if not visible_cmds: continue
+            
+            cog_name = cog.qualified_name
+            # Skip backend/admin cogs to keep it clean for normal users
+            if cog_name in ["Help", "Jishaku", "Logging", "ServerBuilder", "Admin"]: continue 
+            
+            emoji = emojis.get(cog_name, "🔹")
+            
+            cmd_strings = []
+            for cmd in visible_cmds:
+                # If command has subcommands (like group), we can just list the main command for cleanliness
+                if isinstance(cmd, commands.Group):
+                    desc = cmd.description.split('\n')[0] if cmd.description else "Manage this feature."
+                    cmd_strings.append(f"**/{cmd.name}** - *{desc}*")
+                else:
+                    desc = cmd.description.split('\n')[0] if cmd.description else "No description available."
+                    if len(desc) > 55: desc = desc[:52] + "..."
+                    cmd_strings.append(f"**/{cmd.name}** - *{desc}*")
+            
+            # Join and truncate if needed
+            cmd_text = "\n".join(cmd_strings)
+            if len(cmd_text) > 1024:
+                cmd_text = cmd_text[:1020] + "..."
+                
+            embed.add_field(name=f"{emoji} {cog_name}", value=cmd_text, inline=False)
+            
+        embed.set_footer(text="Pro Tip: Use the drop-down in /help for interactive command navigation!")
+        embed.timestamp = discord.utils.utcnow()
+        
+        await ctx.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Help(bot))
