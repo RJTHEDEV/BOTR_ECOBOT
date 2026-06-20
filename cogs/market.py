@@ -286,13 +286,12 @@ class Market(commands.Cog):
 
     @commands.hybrid_command(description="View top market movers.")
     async def movers(self, ctx):
-        # Using a hardcoded list of popular stocks for now as yfinance movers is unreliable
-        popular = ["AAPL", "TSLA", "NVDA", "AMD", "MSFT", "GOOGL", "AMZN", "META", "NFLX", "GME"]
+        msg = await ctx.send("🔄 Fetching live market data...")
         
-        movers_data = []
-        msg = await ctx.send("Fetching market movers...")
+        # Expanded list to find actual movers across tech and volatile sectors
+        popular = ["AAPL", "TSLA", "NVDA", "AMD", "MSFT", "GOOGL", "AMZN", "META", "NFLX", "GME", "PLTR", "COIN", "MARA", "RIOT", "SPY", "QQQ", "SMCI", "MSTR", "INTC", "DJT"]
         
-        for ticker in popular:
+        def get_stock_data(ticker):
             try:
                 stock = yf.Ticker(ticker)
                 hist = stock.history(period="1d")
@@ -301,18 +300,61 @@ class Market(commands.Cog):
                     open_price = hist['Open'].iloc[0]
                     change = current - open_price
                     pct = (change / open_price) * 100
-                    movers_data.append((ticker, current, pct))
+                    return (ticker, current, change, pct)
             except:
                 pass
+            return None
+
+        # Fetch all in parallel to avoid blocking the bot and speed up response
+        tasks = [asyncio.to_thread(get_stock_data, t) for t in popular]
+        results = await asyncio.gather(*tasks)
+        movers_data = [r for r in results if r]
         
-        # Sort by absolute pct change
-        movers_data.sort(key=lambda x: abs(x[2]), reverse=True)
+        # Split SPY/QQQ out for market overview
+        overview_data = {r[0]: r for r in movers_data if r[0] in ["SPY", "QQQ"]}
+        stock_data = [r for r in movers_data if r[0] not in ["SPY", "QQQ"]]
         
-        embed = discord.Embed(title="🚀 Top Market Movers (Watchlist)", color=discord.Color.gold())
-        for ticker, price, pct in movers_data[:5]:
-            emoji = "🟢" if pct >= 0 else "🔴"
-            embed.add_field(name=f"{emoji} {ticker}", value=f"${price:.2f} ({pct:+.2f}%)", inline=False)
+        # Sort into gainers and losers
+        gainers = sorted([r for r in stock_data if r[3] >= 0], key=lambda x: x[3], reverse=True)[:5]
+        losers = sorted([r for r in stock_data if r[3] < 0], key=lambda x: x[3])[:5]
+        
+        # Determine overall market color based on SPY
+        spy_pct = overview_data.get("SPY", [0,0,0,0])[3]
+        embed_color = discord.Color.from_rgb(0, 255, 127) if spy_pct >= 0 else discord.Color.from_rgb(255, 69, 58)
+        
+        embed = discord.Embed(
+            title="🚀 Live Market Movers", 
+            description="Tracking high volatility across major tech & retail sectors.",
+            color=embed_color
+        )
+        
+        # Add Market Overview
+        overview_text = ""
+        for ticker in ["SPY", "QQQ"]:
+            if ticker in overview_data:
+                _, current, change, pct = overview_data[ticker]
+                emoji = "🟩" if pct >= 0 else "🟥"
+                overview_text += f"{emoji} **{ticker}**: `${current:.2f}` ({pct:+.2f}%)\n"
+        if overview_text:
+            embed.add_field(name="📊 Market Benchmark", value=overview_text, inline=False)
             
+        # Add Top Gainers
+        if gainers:
+            gainer_text = ""
+            for ticker, current, change, pct in gainers:
+                gainer_text += f"**{ticker}**\n↳ `${current:.2f}` 📈 `+{pct:.2f}%`\n"
+            embed.add_field(name="🟢 Top Gainers", value=gainer_text, inline=True)
+            
+        # Add Top Losers
+        if losers:
+            loser_text = ""
+            for ticker, current, change, pct in losers:
+                loser_text += f"**{ticker}**\n↳ `${current:.2f}` 📉 `{pct:.2f}%`\n"
+            embed.add_field(name="🔴 Top Losers", value=loser_text, inline=True)
+            
+        embed.set_footer(text="Data provided by Yahoo Finance")
+        embed.timestamp = discord.utils.utcnow()
+        
         await msg.edit(content=None, embed=embed)
 
 async def setup(bot):
