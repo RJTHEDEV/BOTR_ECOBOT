@@ -12,6 +12,7 @@ class Giveaways(commands.Cog):
         self.check_giveaways.cancel()
 
     @commands.hybrid_command(name="giveaway", description="Start a new giveaway.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def start_giveaway(self, ctx, duration_minutes: int, winners_count: int, *, prize: str):
         if duration_minutes <= 0 or winners_count <= 0:

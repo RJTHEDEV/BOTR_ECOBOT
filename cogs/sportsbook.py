@@ -96,6 +96,7 @@ class Sportsbook(commands.Cog):
         await ctx.send("Use `/bet create` or `/bet resolve`.")
 
     @bet.command(name="create", description="Create a custom bet (Streamers/Admins).")
+    @discord.app_commands.default_permissions(manage_messages=True)
     @commands.has_permissions(manage_messages=True)
     async def create(self, ctx, *, question: str):
         embed = discord.Embed(title="🎲 New Prediction Started!", description=f"**{question}**\n\nClick the buttons below to place your bets!", color=discord.Color.purple())
@@ -120,6 +121,7 @@ class Sportsbook(commands.Cog):
         return choices[:25]
 
     @bet.command(name="resolve", description="Resolve a bet and payout winners.")
+    @discord.app_commands.default_permissions(manage_messages=True)
     @commands.has_permissions(manage_messages=True)
     @discord.app_commands.autocomplete(message_id=bet_autocomplete)
     async def resolve(self, ctx, message_id: str, winning_choice: str):

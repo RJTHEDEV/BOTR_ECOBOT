@@ -6,6 +6,7 @@ class ServerBuilder(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_group(name="build", description="Admin commands to help build the server faster.", invoke_without_command=True)
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build(self, ctx):
         embed = discord.Embed(
@@ -21,6 +22,7 @@ class ServerBuilder(commands.Cog):
         await ctx.send(embed=embed)
 
     @build.command(name="role", description="Creates a new role.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build_role(self, ctx, name: str, color: str = None):
         try:
@@ -40,6 +42,7 @@ class ServerBuilder(commands.Cog):
             await ctx.send(f"❌ Error creating role: {e}")
 
     @build.command(name="multiroles", description="Creates multiple roles at once (comma-separated).")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build_multiroles(self, ctx, *, roles: str):
         role_names = [r.strip() for r in roles.split(',') if r.strip()]
@@ -64,6 +67,7 @@ class ServerBuilder(commands.Cog):
         await ctx.send(msg)
 
     @build.command(name="category", description="Creates a new category.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build_category(self, ctx, *, name: str):
         try:
@@ -75,6 +79,7 @@ class ServerBuilder(commands.Cog):
             await ctx.send(f"❌ Error creating category: {e}")
 
     @build.command(name="textchannel", description="Creates a text channel in an optional category.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build_textchannel(self, ctx, name: str, category: discord.CategoryChannel = None):
         try:
@@ -87,6 +92,7 @@ class ServerBuilder(commands.Cog):
             await ctx.send(f"❌ Error creating channel: {e}")
 
     @build.command(name="voicechannel", description="Creates a voice channel in an optional category.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build_voicechannel(self, ctx, name: str, category: discord.CategoryChannel = None):
         try:
@@ -99,6 +105,7 @@ class ServerBuilder(commands.Cog):
             await ctx.send(f"❌ Error creating channel: {e}")
 
     @build.command(name="multichannels", description="Creates multiple text channels at once (comma-separated) in an optional category.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def build_multichannels(self, ctx, category: discord.CategoryChannel = None, *, channels: str = None):
         if not channels:

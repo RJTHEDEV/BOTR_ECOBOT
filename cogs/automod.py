@@ -9,11 +9,13 @@ class AutoMod(commands.Cog):
         self.message_cache = {} # {user_id: [(timestamp, msg_content), ...]}
 
     @commands.hybrid_group(invoke_without_command=True, description="Configure AutoMod settings.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def automod(self, ctx):
         await ctx.send("Use `/automod view`, `/automod blockword`, or `/automod removeword`.")
 
     @automod.command(name="view", description="View AutoMod configuration.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def view_settings(self, ctx):
         async with self.bot.db.execute("SELECT banned_words, anti_spam, anti_caps, punishment FROM automod_settings WHERE guild_id = ?", (ctx.guild.id,)) as cursor:
@@ -36,6 +38,7 @@ class AutoMod(commands.Cog):
         await ctx.send(embed=embed)
 
     @automod.command(name="blockword", description="Add a word to the banned words filter.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def blockword(self, ctx, word: str):
         word = word.lower().strip()

@@ -10,6 +10,7 @@ class VIP(commands.Cog):
         await ctx.send("Use `/vip setup` to configure VIP roles (Admins only).")
 
     @vip.command(name="setup", description="Set a VIP role and its economy multiplier.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def setup_vip(self, ctx, role: discord.Role, multiplier: float):
         if multiplier < 1.0:

@@ -15,6 +15,7 @@ class Community(commands.Cog):
 
     # --- News ---
     @community_group.command(description="Admin: Post a news update.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def news(self, ctx, title: str, *, content: str):
         embed = discord.Embed(title=f"📰 {title}", description=content, color=discord.Color.blue())
@@ -45,6 +46,7 @@ class Community(commands.Cog):
         await ctx.send(embed=embed)
 
     @schedule.command(description="Admin: Add an event to the schedule.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def add(self, ctx, time: str, name: str, *, description: str):
         await self.bot.db.execute("INSERT INTO schedule (event_name, event_time, description) VALUES (?, ?, ?)", (name, time, description))
@@ -53,6 +55,7 @@ class Community(commands.Cog):
 
     # --- Giveaways ---
     @community_group.command(description="Admin: Start a giveaway.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def gstart(self, ctx, duration: str, winners: int, *, prize: str):
         # Simple duration parser (e.g., 10s, 1m, 1h)
@@ -117,11 +120,13 @@ class Community(commands.Cog):
         await self.bot.db.commit()
 
     @community_group.command(description="Admin: End a giveaway early.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def gend(self, ctx, message_id: int):
         await self.end_giveaway(message_id)
 
     @community_group.command(description="Admin: Reroll a giveaway winner.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def greroll(self, ctx, message_id: int):
         # Simplified reroll logic (just picks one new winner)
@@ -150,6 +155,7 @@ class Community(commands.Cog):
         await ctx.send("Use `!raffle start`, `!raffle enter`, or `!raffle end`.")
 
     @raffle.command(description="Admin: Start a raffle.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def start(self, ctx, prize: str, ticket_cost: int, duration: str):
         # Parse duration
@@ -250,6 +256,7 @@ class Community(commands.Cog):
         await self.bot.db.commit()
 
     @raffle.command(name="end", description="Admin: End a raffle early.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def end_cmd(self, ctx, message_id: int):
         await self.end_raffle(message_id)
@@ -260,6 +267,7 @@ class Community(commands.Cog):
         await ctx.send("Use `/welcome set <channel>` or `/welcome test`.")
 
     @welcome.command(description="Set the welcome channel.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set(self, ctx, channel: discord.TextChannel):
         await self.bot.db.execute("INSERT OR REPLACE INTO welcome_settings (guild_id, channel_id) VALUES (?, ?)", (ctx.guild.id, channel.id))
@@ -267,6 +275,7 @@ class Community(commands.Cog):
         await ctx.send(f"✅ Welcome messages will be sent to {channel.mention}.")
 
     @welcome.command(description="Test the welcome message.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def test(self, ctx):
         await self.send_welcome_message(ctx.guild, ctx.author, ctx.channel)
@@ -344,6 +353,7 @@ class Community(commands.Cog):
         await ctx.send("Use `/autorole set <role>` or `/autorole remove`.")
 
     @autorole.command(name="set", description="Set the auto role for new members.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set_autorole(self, ctx, role: discord.Role):
         await self.bot.db.execute("INSERT OR REPLACE INTO auto_roles (guild_id, role_id) VALUES (?, ?)", (ctx.guild.id, role.id))
@@ -351,6 +361,7 @@ class Community(commands.Cog):
         await ctx.send(f"✅ Auto role set to **{role.name}**.")
 
     @autorole.command(name="remove", description="Remove the auto role.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def remove_autorole(self, ctx):
         await self.bot.db.execute("DELETE FROM auto_roles WHERE guild_id = ?", (ctx.guild.id,))
@@ -451,6 +462,7 @@ class Community(commands.Cog):
         await ctx.send(embed=embed)
 
     @community_group.command(description="Create a button-based reaction role menu.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def buttonroles(self, ctx, title: str, description: str, role1: discord.Role, role2: discord.Role = None, role3: discord.Role = None, role4: discord.Role = None, role5: discord.Role = None):
         view = discord.ui.View(timeout=None)

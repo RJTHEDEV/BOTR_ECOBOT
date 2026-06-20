@@ -43,6 +43,7 @@ class Trivia(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_command(description="Start a quick trivia game!")
+    @discord.app_commands.default_permissions(manage_messages=True)
     @commands.has_permissions(manage_messages=True)
     async def trivia(self, ctx):
         await ctx.send("🧠 **Trivia Event Starting in 5 seconds!** Get ready!")

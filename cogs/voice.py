@@ -11,6 +11,7 @@ class Voice(commands.Cog):
         pass
 
     @voice.command(name="setup", description="Set a voice channel as a 'Join to Create' hub.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def setup(self, ctx, channel: discord.VoiceChannel, name_template: str = "{user}'s Channel"):
         """

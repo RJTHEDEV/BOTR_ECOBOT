@@ -42,6 +42,7 @@ class Logging(commands.Cog):
 
     # --- Commands ---
     @commands.hybrid_group(name="log", description="Manage logging settings.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def log_cmd(self, ctx):
         await ctx.send("Use `/log set`, `/log disable`, or `/log ignore`.")
@@ -96,10 +97,14 @@ class Logging(commands.Cog):
         await ctx.send(f"🚫 Logging for **{log_type}** disabled.")
 
     @log_cmd.group(name="ignore", description="Manage ignored channels/users.")
+    @discord.app_commands.default_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
     async def ignore_cmd(self, ctx):
         await ctx.send("Use `/log ignore add` or `/log ignore list`.")
 
     @ignore_cmd.command(description="Ignore a channel or user.")
+    @discord.app_commands.default_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
     async def add(self, ctx, target: str):
         await ctx.defer()
         # Try to resolve target
@@ -121,6 +126,8 @@ class Logging(commands.Cog):
         await ctx.send(f"🔇 Ignored {t_type}: {target}")
 
     @ignore_cmd.command(name="list", description="List ignored items.")
+    @discord.app_commands.default_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
     async def list_ignores(self, ctx):
         await ctx.defer()
         async with self.bot.db.execute("SELECT ignore_type, target_id FROM log_ignores WHERE guild_id = ?", (ctx.guild.id,)) as cursor:

@@ -11,6 +11,7 @@ class StreamSchedule(commands.Cog):
         await ctx.send("Use `/stream_schedule in` to set a countdown.")
 
     @stream_schedule.command(name="in", description="Set a countdown to your next stream. (e.g. 2 hours, 30 minutes)")
+    @discord.app_commands.default_permissions(manage_messages=True)
     @commands.has_permissions(manage_messages=True)
     async def stream_in(self, ctx, title: str, hours: int = 0, minutes: int = 0):
         """

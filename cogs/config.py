@@ -6,11 +6,13 @@ class Config(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_group(invoke_without_command=True, description="Manage server settings.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def config(self, ctx):
         await ctx.send("Use `/config view` or `/config set <setting> <value>`.")
 
     @config.command(name="view", description="View current server settings.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def view_config(self, ctx):
         async with self.bot.db.execute("SELECT * FROM guild_settings WHERE guild_id = ?", (ctx.guild.id,)) as cursor:
@@ -39,6 +41,7 @@ class Config(commands.Cog):
         await ctx.send(embed=embed)
 
     @config.command(name="set_starboard", description="Configure starboard settings.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set_starboard(self, ctx, channel: discord.TextChannel = None, threshold: int = 3, emoji: str = "⭐"):
         channel_id = channel.id if channel else None
@@ -54,6 +57,7 @@ class Config(commands.Cog):
         await ctx.send("✅ Starboard settings updated.")
 
     @config.command(name="set_log", description="Set the logging channel.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set_log(self, ctx, channel: discord.TextChannel = None):
         channel_id = channel.id if channel else None
@@ -65,6 +69,7 @@ class Config(commands.Cog):
         await ctx.send("✅ Log channel updated.")
 
     @config.command(name="set_roles", description="Set auto-role and live-role.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set_roles(self, ctx, auto_role: discord.Role = None, live_role: discord.Role = None):
         auto_id = auto_role.id if auto_role else None

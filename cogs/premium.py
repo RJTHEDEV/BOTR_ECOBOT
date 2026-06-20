@@ -86,6 +86,7 @@ class Premium(commands.Cog):
         await self.bot.db.commit()
 
     @premium.command(name="grant_tickets", description="Admin: Grant tickets to a user after a manual purchase.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def grant_tickets(self, ctx, user: discord.Member, amount: int, reason: str = "Premium Purchase"):
         if amount <= 0:

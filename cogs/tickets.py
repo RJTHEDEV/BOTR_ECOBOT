@@ -58,6 +58,7 @@ class Tickets(commands.Cog):
         pass
 
     @panel.command(name="create", description="Create a new ticket panel.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def create(self, ctx, title: str = "Support Ticket", description: str = "Click the button below to open a ticket.", button_label: str = "Create Ticket"):
         embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
@@ -131,6 +132,7 @@ class Tickets(commands.Cog):
         await ctx.channel.delete()
 
     @commands.hybrid_command(description="Add a user to the ticket.")
+    @discord.app_commands.default_permissions(manage_channels=True)
     @commands.has_permissions(manage_channels=True)
     async def add(self, ctx, user: discord.Member):
         async with self.bot.db.execute("SELECT 1 FROM tickets WHERE channel_id = ?", (ctx.channel.id,)) as cursor:
@@ -142,6 +144,7 @@ class Tickets(commands.Cog):
         await ctx.send(f"✅ Added {user.mention} to the ticket.")
 
     @commands.hybrid_command(description="Remove a user from the ticket.")
+    @discord.app_commands.default_permissions(manage_channels=True)
     @commands.has_permissions(manage_channels=True)
     async def remove(self, ctx, user: discord.Member):
         async with self.bot.db.execute("SELECT 1 FROM tickets WHERE channel_id = ?", (ctx.channel.id,)) as cursor:
@@ -153,6 +156,7 @@ class Tickets(commands.Cog):
         await ctx.send(f"👋 Removed {user.mention} from the ticket.")
 
     @commands.hybrid_command(description="Claim this ticket.")
+    @discord.app_commands.default_permissions(manage_channels=True)
     @commands.has_permissions(manage_channels=True)
     async def claim(self, ctx):
         async with self.bot.db.execute("SELECT 1 FROM tickets WHERE channel_id = ?", (ctx.channel.id,)) as cursor:

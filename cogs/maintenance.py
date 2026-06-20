@@ -40,6 +40,7 @@ class Maintenance(commands.Cog):
         await self.bot.wait_until_ready()
 
     @commands.hybrid_command(description="Manually trigger a database backup.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def backup(self, ctx):
         await ctx.defer(ephemeral=True)

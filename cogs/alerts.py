@@ -71,6 +71,7 @@ class Alerts(commands.Cog):
         await self.bot.wait_until_ready()
 
     @commands.hybrid_command(description="Admin: Post a trade alert.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def alert(self, ctx, type: str, ticker: str, action: str, price: str, *, notes: str = ""):
         """

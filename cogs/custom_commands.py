@@ -6,11 +6,13 @@ class CustomCommands(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_group(name="customcmd", invoke_without_command=True, description="Manage custom commands/auto-responders.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def customcmd(self, ctx):
         await ctx.send("Use `/customcmd add <trigger> <response>`, `/customcmd remove`, or `/customcmd list`.")
 
     @customcmd.command(name="add", description="Add a new custom command.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def add_cmd(self, ctx, trigger: str, *, response: str):
         trigger = trigger.lower().strip()
@@ -19,6 +21,7 @@ class CustomCommands(commands.Cog):
         await ctx.send(f"✅ Added custom command. When someone says `{trigger}`, I will reply with the response.")
 
     @customcmd.command(name="remove", description="Remove a custom command.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def remove_cmd(self, ctx, trigger: str):
         trigger = trigger.lower().strip()
@@ -27,6 +30,7 @@ class CustomCommands(commands.Cog):
         await ctx.send(f"✅ Removed custom command `{trigger}`.")
 
     @customcmd.command(name="list", description="List all custom commands.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def list_cmds(self, ctx):
         async with self.bot.db.execute("SELECT trigger, response FROM custom_commands WHERE guild_id = ?", (ctx.guild.id,)) as cursor:

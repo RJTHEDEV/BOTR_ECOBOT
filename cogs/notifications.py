@@ -21,6 +21,7 @@ class Notifications(commands.Cog):
         self.check_tiktok.cancel()
 
     @commands.hybrid_group(name="alerts", description="Setup automated notifications for content creators.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def notify_group(self, ctx):
         pass
@@ -52,6 +53,7 @@ class Notifications(commands.Cog):
             print(f"Failed to handle live role for {discord_user_id}: {e}")
 
     @notify_group.command(name="list", description="List all active content alerts in this server.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def list_alerts(self, ctx):
         embed = discord.Embed(title="📡 Active Server Alerts", color=discord.Color.blurple())
@@ -90,6 +92,7 @@ class Notifications(commands.Cog):
         await ctx.send(embed=embed)
 
     @notify_group.command(name="youtube", description="Add a YouTube channel to post notifications for.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def add_youtube(self, ctx, channel_id: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         """
@@ -133,6 +136,7 @@ class Notifications(commands.Cog):
         await ctx.send(embed=embed)
 
     @notify_group.command(name="remove_youtube", description="Stop monitoring a YouTube channel.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def remove_youtube(self, ctx, channel_id: str):
         await self.bot.db.execute("DELETE FROM youtube_alerts WHERE guild_id = ? AND youtube_channel_id = ?", (ctx.guild.id, channel_id))
@@ -242,6 +246,7 @@ class Notifications(commands.Cog):
             print(f"Error in youtube alert loop: {e}")
 
     @notify_group.command(name="twitch", description="Add a Twitch streamer to post notifications for.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def add_twitch(self, ctx, twitch_username: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         async with self.bot.db.execute("SELECT id FROM twitch_alerts WHERE guild_id = ? AND twitch_username = ?", (ctx.guild.id, twitch_username.lower())) as cursor:
@@ -261,6 +266,7 @@ class Notifications(commands.Cog):
         await ctx.send(embed=embed)
 
     @notify_group.command(name="remove_twitch", description="Stop monitoring a Twitch streamer.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def remove_twitch(self, ctx, twitch_username: str):
         await self.bot.db.execute("DELETE FROM twitch_alerts WHERE guild_id = ? AND twitch_username = ?", (ctx.guild.id, twitch_username.lower()))
@@ -268,6 +274,7 @@ class Notifications(commands.Cog):
         await ctx.send(f"✅ Removed `{twitch_username}` from Twitch alerts.")
 
     @notify_group.command(name="link_user", description="Link a Discord user to an existing alert (so they get pinged and get the Live role).")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def link_user(self, ctx, platform: str, streamer_username: str, discord_user: discord.Member):
         platform = platform.lower()
@@ -411,6 +418,7 @@ class Notifications(commands.Cog):
             print(f"Error in twitch alert loop: {e}")
 
     @notify_group.command(name="kick", description="Add a Kick streamer to post notifications for.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def add_kick(self, ctx, kick_username: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         async with self.bot.db.execute("SELECT id FROM kick_alerts WHERE guild_id = ? AND kick_username = ?", (ctx.guild.id, kick_username.lower())) as cursor:
@@ -429,6 +437,7 @@ class Notifications(commands.Cog):
         await ctx.send(embed=embed)
 
     @notify_group.command(name="remove_kick", description="Stop monitoring a Kick streamer.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def remove_kick(self, ctx, kick_username: str):
         await self.bot.db.execute("DELETE FROM kick_alerts WHERE guild_id = ? AND kick_username = ?", (ctx.guild.id, kick_username.lower()))
@@ -506,6 +515,7 @@ class Notifications(commands.Cog):
             print(f"Error in kick alert loop: {e}")
 
     @notify_group.command(name="tiktok", description="Add a TikTok streamer to post notifications for.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def add_tiktok(self, ctx, tiktok_username: str, discord_channel: discord.TextChannel, discord_user: discord.Member = None, custom_message: str = "@everyone"):
         tiktok_username = tiktok_username.replace("@", "")
@@ -538,6 +548,7 @@ class Notifications(commands.Cog):
         await ctx.send(embed=embed)
 
     @notify_group.command(name="remove_tiktok", description="Stop monitoring a TikTok streamer.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def remove_tiktok(self, ctx, tiktok_username: str):
         tiktok_username = tiktok_username.replace("@", "")
@@ -711,6 +722,7 @@ class Notifications(commands.Cog):
             except: pass
 
     @commands.hybrid_command(name="set_live_role", description="Set a role to automatically give to users when they stream on Discord.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set_live_role(self, ctx, role: discord.Role):
         await self.bot.db.execute(

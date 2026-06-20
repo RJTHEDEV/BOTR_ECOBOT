@@ -59,6 +59,7 @@ class Polls(commands.Cog):
             await ctx.send(f"Failed to create poll: {e}")
 
     @commands.hybrid_command(description="End a poll early.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def endpoll(self, ctx, message_id: str):
         try:

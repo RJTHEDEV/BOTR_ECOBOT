@@ -84,6 +84,7 @@ class Store(commands.Cog):
         await ctx.send(embed=embed)
 
     @store_group.command(description="Admin: Add an item to the shop.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def additem(self, ctx, name: str, price: int, description: str, currency: str = "coins", category: str = "Items"):
         if currency not in ["coins", "tickets"]:
@@ -97,6 +98,7 @@ class Store(commands.Cog):
             await ctx.send(f"Error adding item: {e}")
 
     @store_group.command(description="Admin: Remove an item from the shop.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def removeitem(self, ctx, *, name: str):
         try:
@@ -108,6 +110,7 @@ class Store(commands.Cog):
             await ctx.send(f"Error removing item: {e}")
 
     @store_group.command(description="Admin: Auto-populate the store with a full community setup.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def populate(self, ctx):
         items = [

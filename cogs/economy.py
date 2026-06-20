@@ -495,6 +495,7 @@ class Economy(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.hybrid_command(description="Admin: Give coins to a user.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def give(self, ctx, member: discord.Member, amount: int):
         async with self.bot.db.execute("SELECT balance FROM users WHERE user_id = ?", (member.id,)) as cursor:
@@ -508,6 +509,7 @@ class Economy(commands.Cog):
         await ctx.send(f"Gave ${amount} to {member.mention}.")
 
     @commands.hybrid_command(description="Admin: Give tickets to a user.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def givetickets(self, ctx, member: discord.Member, amount: int):
         async with self.bot.db.execute("SELECT tickets FROM users WHERE user_id = ?", (member.id,)) as cursor:

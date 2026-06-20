@@ -242,6 +242,7 @@ class Applications(commands.Cog):
         pass
 
     @apply.command(name="panel", description="Create an application panel with up to 10 custom questions.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def panel(self, ctx, target_channel: discord.TextChannel, title: str, description: str, 
                     q1: str, q2: str = None, q3: str = None, q4: str = None, q5: str = None, 

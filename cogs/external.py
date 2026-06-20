@@ -62,6 +62,7 @@ class External(commands.Cog):
                 await ctx.send(embed=embed)
 
     @commands.hybrid_command(description="Admin: Post a tweet.")
+    @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def tweet(self, ctx, *, message: str):
         if not self.twitter_client:
