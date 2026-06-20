@@ -126,7 +126,8 @@ class Help(commands.Cog):
             mapping = {cog: cog.get_commands() for cog in self.bot.cogs.values()}
             mapping[None] = [c for c in self.bot.commands if c.cog is None]
             
-        embed = discord.Embed(
+        embeds = []
+        current_embed = discord.Embed(
             title="📋 Master Command List", 
             description="Here is a clean and categorized list of everything I can do. For more details, use `/help`.", 
             color=discord.Color.from_rgb(43, 45, 49) # Clean Discord dark theme color
@@ -142,7 +143,9 @@ class Help(commands.Cog):
         }
         
         # Sort cogs alphabetically, pushing None to the end
-        sorted_cogs = sorted([c for c in mapping.keys() if c], key=lambda c: c.qualified_name)
+        sorted_cogs = sorted([c for c in mapping.keys() if c], key=lambda c: getattr(c, "qualified_name", "Z"))
+        
+        field_count = 0
         
         for cog in sorted_cogs:
             commands_list = mapping[cog]
@@ -152,7 +155,7 @@ class Help(commands.Cog):
             visible_cmds = [cmd for cmd in commands_list if not cmd.hidden]
             if not visible_cmds: continue
             
-            cog_name = cog.qualified_name
+            cog_name = getattr(cog, "qualified_name", "Other")
             # Skip backend/admin cogs to keep it clean for normal users
             if cog_name in ["Help", "Jishaku", "Logging", "ServerBuilder", "Admin"]: continue 
             
@@ -174,12 +177,19 @@ class Help(commands.Cog):
             if len(cmd_text) > 1024:
                 cmd_text = cmd_text[:1020] + "..."
                 
-            embed.add_field(name=f"{emoji} {cog_name}", value=cmd_text, inline=False)
+            if field_count >= 25:
+                embeds.append(current_embed)
+                current_embed = discord.Embed(color=discord.Color.from_rgb(43, 45, 49))
+                field_count = 0
+                
+            current_embed.add_field(name=f"{emoji} {cog_name}", value=cmd_text, inline=False)
+            field_count += 1
             
-        embed.set_footer(text="Pro Tip: Use the drop-down in /help for interactive command navigation!")
-        embed.timestamp = discord.utils.utcnow()
+        current_embed.set_footer(text="Pro Tip: Use the drop-down in /help for interactive command navigation!")
+        current_embed.timestamp = discord.utils.utcnow()
+        embeds.append(current_embed)
         
-        await ctx.send(embed=embed)
+        await ctx.send(embeds=embeds[:10])
 
 async def setup(bot):
     await bot.add_cog(Help(bot))
