@@ -128,16 +128,43 @@ class Moderation(commands.Cog):
             except Exception as e:
                 await ctx.send(f"⚠️ Failed to apply automated mute: {e}")
 
-    @mod.command(description="Clear multiple messages.")
-    @commands.has_permissions(manage_messages=True)
-    async def purge(self, ctx, amount: int):
-        if amount <= 0 or amount > 1000:
-            await ctx.send("Amount must be between 1 and 1000.")
+    @mod.command(description="Clear messages. Use a number, or type 'all' to nuke the channel.")
+    @commands.has_permissions(manage_channels=True, manage_messages=True)
+    async def purge(self, ctx, amount: str):
+        if amount.lower() == "all":
+            # Nuke the channel
+            msg = await ctx.send("🧨 Nuke sequence initiated...")
+            await asyncio.sleep(2)
+            new_channel = await ctx.channel.clone(reason=f"Channel nuked by {ctx.author}")
+            await new_channel.edit(position=ctx.channel.position)
+            await ctx.channel.delete()
+            
+            embed = discord.Embed(
+                title="💥 Channel Nuked",
+                description=f"This channel was completely wiped by {ctx.author.mention}.",
+                color=discord.Color.red()
+            )
+            embed.set_image(url="https://media.giphy.com/media/HhTXt43pk1I1W/giphy.gif")
+            await new_channel.send(embed=embed)
+            
+            log_embed = discord.Embed(description=f"**Channel Nuked: #{new_channel.name}**", color=discord.Color.red())
+            log_embed.set_footer(text=f"Mod: {ctx.author}")
+            await self.log_mod_action(ctx.guild, log_embed)
+            return
+
+        try:
+            amt = int(amount)
+        except ValueError:
+            await ctx.send("❌ Please provide a valid number or type `all`.", ephemeral=True)
+            return
+
+        if amt <= 0 or amt > 1000:
+            await ctx.send("❌ Amount must be between 1 and 1000.", ephemeral=True)
             return
         
         await ctx.defer(ephemeral=True)
         # Using interaction check to not delete interaction message twice if invoked via slash
-        deleted = await ctx.channel.purge(limit=amount + (1 if not ctx.interaction else 0))
+        deleted = await ctx.channel.purge(limit=amt + (1 if not ctx.interaction else 0))
         
         embed = discord.Embed(description=f"**Purged {len(deleted)} messages.**", color=discord.Color.green())
         msg = await ctx.send(embed=embed)
