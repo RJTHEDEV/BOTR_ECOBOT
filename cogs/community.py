@@ -371,22 +371,43 @@ class Community(commands.Cog):
     # --- Starboard ---
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        if str(payload.emoji) != "⭐": return
+        if not payload.guild_id: return
+
+        # Fetch settings
+        async with self.bot.db.execute("SELECT starboard_channel_id, starboard_threshold, starboard_emoji FROM guild_settings WHERE guild_id = ?", (payload.guild_id,)) as cursor:
+            settings = await cursor.fetchone()
+        
+        sb_channel_id = settings[0] if settings and settings[0] else None
+        sb_thresh = settings[1] if settings and settings[1] else 3
+        sb_emoji = settings[2] if settings and settings[2] else "⭐"
+
+        if str(payload.emoji) != sb_emoji and payload.emoji.name != sb_emoji: return
         
         channel = self.bot.get_channel(payload.channel_id)
+        if not channel: return
         try:
             message = await channel.fetch_message(payload.message_id)
         except:
             return
 
-        reaction = discord.utils.get(message.reactions, emoji="⭐")
-        if not reaction or reaction.count < 3: return # Threshold: 3
+        reaction = None
+        for r in message.reactions:
+            if str(r.emoji) == sb_emoji or r.emoji.name == sb_emoji:
+                reaction = r
+                break
+                
+        if not reaction or reaction.count < sb_thresh: return
 
         # Check if already posted
         async with self.bot.db.execute("SELECT starboard_message_id FROM starboard WHERE message_id = ?", (message.id,)) as cursor:
             row = await cursor.fetchone()
         
-        starboard_channel = discord.utils.get(message.guild.text_channels, name="starboard")
+        starboard_channel = None
+        if sb_channel_id:
+            starboard_channel = message.guild.get_channel(sb_channel_id)
+            
+        if not starboard_channel:
+            starboard_channel = discord.utils.get(message.guild.text_channels, name="starboard")
         
         # Create channel if not exists
         if not starboard_channel:
@@ -400,7 +421,7 @@ class Community(commands.Cog):
         embed.add_field(name="Source", value=f"[Jump to Message]({message.jump_url})")
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
-        embed.set_footer(text=f"⭐ {reaction.count} | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
+        embed.set_footer(text=f"{sb_emoji} {reaction.count} | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
 
         if row:
             # Update existing
