@@ -296,6 +296,9 @@ class Notifications(commands.Cog):
             await ctx.send("For YouTube, please enter their channel ID instead of their username.", ephemeral=True)
             # Keeping it simple, matching on the identifier
             
+        if platform == "tiktok":
+            streamer_username = streamer_username.replace("@", "")
+            
         # Check if the alert exists first
         async with self.bot.db.execute(f"SELECT id FROM {table} WHERE guild_id = ? AND {column} = ?", (ctx.guild.id, streamer_username.lower() if platform != 'youtube' else streamer_username)) as cursor:
             if not await cursor.fetchone():
@@ -629,7 +632,7 @@ class Notifications(commands.Cog):
                             view.add_item(discord.ui.Button(label="Watch Stream", style=discord.ButtonStyle.link, url=url))
                             
                             if discord_user_id:
-                                content = f"{custom_message}\n🔴 <@{discord_user_id}> is live now!"
+                                content = f"{custom_message}\n🔴 <@{discord_user_id}> (**@{tiktok_username}**) is live now!"
                             else:
                                 content = f"{custom_message}\n🔴 **@{tiktok_username}** is live now!"
                             await channel.send(content=content, embed=embed, view=view)
@@ -687,7 +690,7 @@ class Notifications(commands.Cog):
                                             view.add_item(discord.ui.Button(label="Watch Video", style=discord.ButtonStyle.link, url=url))
                                             
                                             if discord_user_id:
-                                                content = f"{custom_message}\n🎵 <@{discord_user_id}> just posted a new TikTok!"
+                                                content = f"{custom_message}\n🎵 <@{discord_user_id}> (**{nickname}**) just posted a new TikTok!"
                                             else:
                                                 content = f"{custom_message}\n🎵 **{nickname}** (@{tiktok_username}) just posted a new TikTok!"
                                             await channel.send(content=content, embed=embed, view=view)
