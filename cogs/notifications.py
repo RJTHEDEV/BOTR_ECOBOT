@@ -704,7 +704,7 @@ class Notifications(commands.Cog):
     # AUTO LIVE ROLE SYSTEM
     # ==========================================
 
-    @commands.hybrid_command(name="set_live_role", description="Set a role to automatically give to users when their external stream (Twitch, Kick, TikTok) goes live.")
+    @commands.hybrid_command(name="set_live_role", description="Set role given to users when their linked stream (Twitch, Kick) goes live.")
     @discord.app_commands.default_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     async def set_live_role(self, ctx, role: discord.Role):
