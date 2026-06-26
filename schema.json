@@ -1,0 +1,192 @@
+{
+    "users": [
+        "user_id",
+        "balance",
+        "xp",
+        "level",
+        "tickets",
+        "bank",
+        "reputation",
+        "last_daily",
+        "last_work",
+        "last_crime",
+        "last_rob",
+        "last_rep",
+        "daily_streak"
+    ],
+    "inventory": [
+        "user_id",
+        "item_name",
+        "quantity"
+    ],
+    "store": [
+        "item_id",
+        "name",
+        "price",
+        "description",
+        "currency",
+        "category"
+    ],
+    "sqlite_sequence": [
+        "name",
+        "seq"
+    ],
+    "schedule": [
+        "id",
+        "event_name",
+        "event_time",
+        "description"
+    ],
+    "giveaways": [
+        "message_id",
+        "channel_id",
+        "prize",
+        "end_time",
+        "winners_count",
+        "ended"
+    ],
+    "raffles": [
+        "raffle_id",
+        "channel_id",
+        "message_id",
+        "prize",
+        "ticket_cost",
+        "ended"
+    ],
+    "raffle_entries": [
+        "raffle_id",
+        "user_id",
+        "entries_count"
+    ],
+    "watchlist": [
+        "user_id",
+        "ticker"
+    ],
+    "portfolio": [
+        "user_id",
+        "ticker",
+        "avg_price",
+        "shares",
+        "avg_buy_price"
+    ],
+    "log_settings": [
+        "guild_id",
+        "log_type",
+        "channel_id"
+    ],
+    "log_ignores": [
+        "guild_id",
+        "ignore_type",
+        "target_id"
+    ],
+    "infractions": [
+        "id",
+        "guild_id",
+        "user_id",
+        "mod_id",
+        "type",
+        "reason",
+        "timestamp"
+    ],
+    "sticky_roles": [
+        "guild_id",
+        "user_id",
+        "role_ids"
+    ],
+    "streamers": [
+        "guild_id",
+        "channel_id",
+        "platform",
+        "username",
+        "last_live"
+    ],
+    "ticket_panels": [
+        "message_id",
+        "channel_id",
+        "guild_id",
+        "title",
+        "description",
+        "button_label"
+    ],
+    "tickets": [
+        "channel_id",
+        "guild_id",
+        "user_id",
+        "panel_message_id",
+        "status"
+    ],
+    "voice_hubs": [
+        "guild_id",
+        "channel_id",
+        "category_id",
+        "name_template"
+    ],
+    "temp_channels": [
+        "channel_id",
+        "owner_id"
+    ],
+    "welcome_settings": [
+        "guild_id",
+        "channel_id"
+    ],
+    "price_alerts": [
+        "id",
+        "user_id",
+        "ticker",
+        "target_price",
+        "condition",
+        "triggered"
+    ],
+    "polls": [
+        "message_id",
+        "channel_id",
+        "guild_id",
+        "author_id",
+        "question",
+        "options",
+        "end_time",
+        "active"
+    ],
+    "poll_votes": [
+        "poll_id",
+        "user_id",
+        "option_index"
+    ],
+    "limit_orders": [
+        "order_id",
+        "user_id",
+        "symbol",
+        "order_type",
+        "target_price",
+        "quantity",
+        "created_at"
+    ],
+    "options": [
+        "id",
+        "user_id",
+        "ticker",
+        "option_type",
+        "strike_price",
+        "expiration_date",
+        "premium",
+        "contracts",
+        "status"
+    ],
+    "birthdays": [
+        "user_id",
+        "month",
+        "day"
+    ],
+    "starboard": [
+        "message_id",
+        "starboard_message_id"
+    ],
+    "transaction_logs": [
+        "id",
+        "user_id",
+        "type",
+        "amount",
+        "description",
+        "timestamp"
+    ]
+}
